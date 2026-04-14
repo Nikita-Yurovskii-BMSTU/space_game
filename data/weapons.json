@@ -1,0 +1,26 @@
+{
+  "laser": {
+    "name": "Лазер",
+    "damage": 25,
+    "cooldown": 2,
+    "slot_size": 1
+  },
+  "missile": {
+    "name": "Ракетница",
+    "damage": 50,
+    "cooldown": 5,
+    "slot_size": 2
+  },
+  "railgun": {
+    "name": "Рельсотрон",
+    "damage": 100,
+    "cooldown": 8,
+    "slot_size": 3
+  },
+  "plasma": {
+    "name": "Плазменная пушка",
+    "damage": 40,
+    "cooldown": 3,
+    "slot_size": 1
+  }
+}

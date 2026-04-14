@@ -1,0 +1,500 @@
+{
+  "nexus": {
+    "name": "Nexus",
+    "danger": "safe",
+    "connections": ["void", "forge"],
+    "stars": {
+      "nexus_alpha": {
+        "name": "Nexus Alpha",
+        "type": "yellow_dwarf",
+        "coordinates": {"x": 0, "y": 0, "z": 0},
+        "objects": [
+          {
+            "type": "station",
+            "name": "Nexus Prime Station",
+            "coordinates": {"x": 10, "y": -5, "z": 15},
+            "services": ["repair", "trade", "missions"]
+          },
+          {
+            "type": "planet",
+            "subtype": "terran",
+            "name": "New Hope",
+            "coordinates": {"x": 40, "y": 20, "z": -30},
+            "danger": "safe"
+          },
+          {
+            "type": "belt",
+            "subtype": "sparse",
+            "name": "Nexus Belt",
+            "coordinates": {"x": -30, "y": -10, "z": 50},
+            "danger": "safe",
+            "resources": ["iron", "copper"]
+          }
+        ]
+      },
+      "nexus_beta": {
+        "name": "Nexus Beta",
+        "type": "red_giant",
+        "coordinates": {"x": 200, "y": 100, "z": -50},
+        "objects": [
+          {
+            "type": "planet",
+            "subtype": "barren",
+            "name": "Dust",
+            "coordinates": {"x": 60, "y": -20, "z": 40},
+            "danger": "safe"
+          },
+          {
+            "type": "belt",
+            "subtype": "ice_field",
+            "name": "Frozen Reaches",
+            "coordinates": {"x": -50, "y": 30, "z": -70},
+            "danger": "safe",
+            "resources": ["ice", "crystals"]
+          }
+        ]
+      },
+      "nexus_nova": {
+        "name": "Nexus Nova",
+        "type": "neutron_star",
+        "coordinates": {"x": -150, "y": -200, "z": 100},
+        "objects": [
+          {
+            "type": "debris_field",
+            "name": "Old Battlefield",
+            "coordinates": {"x": 20, "y": 40, "z": -30},
+            "danger": "moderate",
+            "enemies": ["pirate_scout", "pirate_fighter"]
+          }
+        ]
+      }
+    }
+  },
+  "void": {
+    "name": "Void",
+    "danger": "moderate",
+    "connections": ["nexus", "crimson", "echo"],
+    "stars": {
+      "void_sigma": {
+        "name": "Void Sigma",
+        "type": "blue_giant",
+        "coordinates": {"x": 0, "y": 0, "z": 0},
+        "objects": [
+          {
+            "type": "station",
+            "name": "Void Outpost",
+            "coordinates": {"x": -20, "y": 15, "z": 25},
+            "services": ["repair", "trade"]
+          },
+          {
+            "type": "planet",
+            "subtype": "ice_world",
+            "name": "Hoth Minor",
+            "coordinates": {"x": 70, "y": -40, "z": 20},
+            "danger": "moderate",
+            "enemies": ["crimson_scout"]
+          },
+          {
+            "type": "belt",
+            "subtype": "dense",
+            "name": "Void Fields",
+            "coordinates": {"x": -60, "y": 30, "z": -50},
+            "danger": "moderate",
+            "resources": ["titanium", "gold"],
+            "enemies": ["pirate_fighter", "crimson_raider"]
+          }
+        ]
+      },
+      "void_pulsar": {
+        "name": "Void Pulsar",
+        "type": "pulsar",
+        "coordinates": {"x": 150, "y": -100, "z": 80},
+        "objects": [
+          {
+            "type": "planet",
+            "subtype": "gas_giant",
+            "name": "Storm",
+            "coordinates": {"x": 30, "y": 50, "z": -40},
+            "danger": "dangerous",
+            "enemies": ["crimson_cruiser"]
+          }
+        ]
+      },
+      "void_omega": {
+        "name": "Void Omega",
+        "type": "white_dwarf",
+        "coordinates": {"x": -100, "y": 150, "z": -120},
+        "objects": [
+          {
+            "type": "debris_field",
+            "name": "Crimson Graveyard",
+            "coordinates": {"x": -10, "y": -30, "z": 60},
+            "danger": "dangerous",
+            "enemies": ["crimson_fighter", "crimson_cruiser", "crimson_destroyer"]
+          }
+        ]
+      }
+    }
+  },
+  "crimson": {
+    "name": "Crimson",
+    "danger": "dangerous",
+    "connections": ["void", "obsidian"],
+    "stars": {
+      "crimson_gamma": {
+        "name": "Crimson Gamma",
+        "type": "red_supergiant",
+        "coordinates": {"x": 0, "y": 0, "z": 0},
+        "objects": [
+          {
+            "type": "station",
+            "name": "Crimson Haven",
+            "coordinates": {"x": 40, "y": -20, "z": 30},
+            "services": ["repair", "black_market"]
+          },
+          {
+            "type": "planet",
+            "subtype": "volcanic",
+            "name": "Inferno",
+            "coordinates": {"x": -50, "y": 60, "z": -30},
+            "danger": "dangerous",
+            "enemies": ["crimson_fighter", "crimson_raider"]
+          },
+          {
+            "type": "belt",
+            "subtype": "dense",
+            "name": "Crimson Belt",
+            "coordinates": {"x": 80, "y": -70, "z": -50},
+            "danger": "dangerous",
+            "resources": ["platinum", "dark_matter"],
+            "enemies": ["crimson_cruiser", "crimson_elite"]
+          }
+        ]
+      },
+      "crimson_delta": {
+        "name": "Crimson Delta",
+        "type": "nebula",
+        "coordinates": {"x": 200, "y": 50, "z": -150},
+        "objects": [
+          {
+            "type": "planet",
+            "subtype": "barren",
+            "name": "Ash",
+            "coordinates": {"x": -40, "y": 20, "z": 70},
+            "danger": "deadly",
+            "enemies": ["crimson_destroyer", "crimson_dreadnought"]
+          }
+        ]
+      }
+    }
+  },
+  "forge": {
+    "name": "Forge",
+    "danger": "moderate",
+    "connections": ["nexus", "echo", "helios"],
+    "stars": {
+      "forge_epsilon": {
+        "name": "Forge Epsilon",
+        "type": "yellow_dwarf",
+        "coordinates": {"x": 0, "y": 0, "z": 0},
+        "objects": [
+          {
+            "type": "station",
+            "name": "Forge Central",
+            "coordinates": {"x": 15, "y": -10, "z": 20},
+            "services": ["repair", "upgrade", "trade"]
+          },
+          {
+            "type": "planet",
+            "subtype": "terran",
+            "name": "Industry",
+            "coordinates": {"x": 60, "y": 30, "z": -20},
+            "danger": "moderate",
+            "enemies": ["renegade_drone"]
+          },
+          {
+            "type": "belt",
+            "subtype": "dense",
+            "name": "Forge Belt",
+            "coordinates": {"x": -40, "y": -50, "z": 60},
+            "danger": "moderate",
+            "resources": ["iron", "copper", "titanium"],
+            "enemies": ["renegade_drone", "ai_sentry"]
+          }
+        ]
+      },
+      "forge_zeta": {
+        "name": "Forge Zeta",
+        "type": "red_dwarf",
+        "coordinates": {"x": 100, "y": -80, "z": 120},
+        "objects": [
+          {
+            "type": "debris_field",
+            "name": "AI Junkyard",
+            "coordinates": {"x": 20, "y": -10, "z": -30},
+            "danger": "dangerous",
+            "enemies": ["ai_sentry", "ai_warrior", "ai_overlord"]
+          }
+        ]
+      }
+    }
+  },
+  "echo": {
+    "name": "Echo",
+    "danger": "moderate",
+    "connections": ["void", "forge", "obsidian", "abyss"],
+    "stars": {
+      "echo_theta": {
+        "name": "Echo Theta",
+        "type": "white_dwarf",
+        "coordinates": {"x": 0, "y": 0, "z": 0},
+        "objects": [
+          {
+            "type": "station",
+            "name": "Echo Relay",
+            "coordinates": {"x": -25, "y": 15, "z": -15},
+            "services": ["repair", "missions"]
+          },
+          {
+            "type": "planet",
+            "subtype": "ice_world",
+            "name": "Silence",
+            "coordinates": {"x": 50, "y": -30, "z": 40},
+            "danger": "moderate",
+            "enemies": ["pirate_fighter", "renegade_drone"]
+          },
+          {
+            "type": "belt",
+            "subtype": "ice_field",
+            "name": "Whisper Field",
+            "coordinates": {"x": -70, "y": 40, "z": -60},
+            "danger": "moderate",
+            "resources": ["ice", "crystals", "dark_matter"]
+          }
+        ]
+      },
+      "echo_iota": {
+        "name": "Echo Iota",
+        "type": "pulsar",
+        "coordinates": {"x": -120, "y": 100, "z": 80},
+        "objects": [
+          {
+            "type": "planet",
+            "subtype": "gas_giant",
+            "name": "Echo Giant",
+            "coordinates": {"x": 30, "y": -50, "z": -20},
+            "danger": "dangerous",
+            "enemies": ["crimson_raider", "ai_warrior"]
+          }
+        ]
+      }
+    }
+  },
+  "obsidian": {
+    "name": "Obsidian",
+    "danger": "deadly",
+    "connections": ["crimson", "echo", "abyss"],
+    "stars": {
+      "obsidian_kappa": {
+        "name": "Obsidian Kappa",
+        "type": "black_hole",
+        "coordinates": {"x": 0, "y": 0, "z": 0},
+        "objects": [
+          {
+            "type": "station",
+            "name": "Obsidian Watch",
+            "coordinates": {"x": 50, "y": -40, "z": 30},
+            "services": ["repair", "black_market"]
+          },
+          {
+            "type": "planet",
+            "subtype": "volcanic",
+            "name": "Dark Forge",
+            "coordinates": {"x": -60, "y": 50, "z": -40},
+            "danger": "deadly",
+            "enemies": ["obsidian_acolyte", "obsidian_priest"]
+          },
+          {
+            "type": "belt",
+            "subtype": "dense",
+            "name": "Obsidian Ring",
+            "coordinates": {"x": 70, "y": -80, "z": -50},
+            "danger": "deadly",
+            "resources": ["dark_matter", "ancient_artifact"],
+            "enemies": ["obsidian_priest", "obsidian_voidwalker"]
+          }
+        ]
+      },
+      "obsidian_lambda": {
+        "name": "Obsidian Lambda",
+        "type": "neutron_star",
+        "coordinates": {"x": 150, "y": -120, "z": 90},
+        "objects": [
+          {
+            "type": "planet",
+            "subtype": "barren",
+            "name": "Abyss Gate",
+            "coordinates": {"x": -20, "y": 60, "z": 30},
+            "danger": "deadly",
+            "enemies": ["obsidian_dreadnought", "obsidian_avatar"]
+          }
+        ]
+      }
+    }
+  },
+  "helios": {
+    "name": "Helios",
+    "danger": "dangerous",
+    "connections": ["forge", "abyss"],
+    "stars": {
+      "helios_alpha": {
+        "name": "Helios Alpha",
+        "type": "binary_star",
+        "coordinates": {"x": 0, "y": 0, "z": 0},
+        "objects": [
+          {
+            "type": "station",
+            "name": "Helios Observatory",
+            "coordinates": {"x": 30, "y": -20, "z": 40},
+            "services": ["repair", "research"]
+          },
+          {
+            "type": "planet",
+            "subtype": "terran",
+            "name": "Dawn",
+            "coordinates": {"x": -50, "y": 30, "z": -20},
+            "danger": "dangerous",
+            "enemies": ["ancient_drone", "ancient_sentinel"]
+          },
+          {
+            "type": "debris_field",
+            "name": "Ancient Ruins",
+            "coordinates": {"x": 60, "y": -50, "z": -70},
+            "danger": "dangerous",
+            "enemies": ["ancient_sentinel", "ancient_guardian"]
+          }
+        ]
+      },
+      "helios_beta": {
+        "name": "Helios Beta",
+        "type": "red_giant",
+        "coordinates": {"x": -100, "y": 150, "z": -80},
+        "objects": [
+          {
+            "type": "planet",
+            "subtype": "gas_giant",
+            "name": "Helios Prime",
+            "coordinates": {"x": 40, "y": -60, "z": 20},
+            "danger": "deadly",
+            "enemies": ["ancient_guardian", "ancient_titan"]
+          }
+        ]
+      }
+    }
+  },
+  "abyss": {
+    "name": "Abyss",
+    "danger": "deadly",
+    "connections": ["echo", "obsidian", "helios", "aegis"],
+    "stars": {
+      "abyss_sigma": {
+        "name": "Abyss Sigma",
+        "type": "black_hole",
+        "coordinates": {"x": 0, "y": 0, "z": 0},
+        "objects": [
+          {
+            "type": "station",
+            "name": "Abyss Deep",
+            "coordinates": {"x": -40, "y": 30, "z": -50},
+            "services": ["repair", "black_market"]
+          },
+          {
+            "type": "planet",
+            "subtype": "ice_world",
+            "name": "Frozen Void",
+            "coordinates": {"x": 70, "y": -40, "z": 30},
+            "danger": "deadly",
+            "enemies": ["obsidian_voidwalker", "obsidian_priest"]
+          },
+          {
+            "type": "belt",
+            "subtype": "debris_field",
+            "name": "Lost Fleet",
+            "coordinates": {"x": -80, "y": 60, "z": 70},
+            "danger": "deadly",
+            "enemies": ["obsidian_dreadnought", "ancient_guardian", "void_entity"]
+          }
+        ]
+      }
+    }
+  },
+  "aegis": {
+    "name": "Aegis",
+    "danger": "safe",
+    "connections": ["abyss"],
+    "stars": {
+      "aegis_omega": {
+        "name": "Aegis Omega",
+        "type": "yellow_dwarf",
+        "coordinates": {"x": 0, "y": 0, "z": 0},
+        "objects": [
+          {
+            "type": "station",
+            "name": "Aegis Shield",
+            "coordinates": {"x": 20, "y": -10, "z": 30},
+            "services": ["repair", "trade", "upgrade", "missions"]
+          },
+          {
+            "type": "planet",
+            "subtype": "terran",
+            "name": "Sanctuary",
+            "coordinates": {"x": 50, "y": 30, "z": -40},
+            "danger": "safe"
+          },
+          {
+            "type": "planet",
+            "subtype": "gas_giant",
+            "name": "Aegis Giant",
+            "coordinates": {"x": -60, "y": -40, "z": 50},
+            "danger": "safe"
+          }
+        ]
+      }
+    }
+  },
+  "zenith": {
+    "name": "Zenith",
+    "danger": "dangerous",
+    "connections": ["aegis"],
+    "stars": {
+      "zenith_prime": {
+        "name": "Zenith Prime",
+        "type": "neutron_star",
+        "coordinates": {"x": 0, "y": 0, "z": 0},
+        "objects": [
+          {
+            "type": "station",
+            "name": "Zenith Spire",
+            "coordinates": {"x": 30, "y": -50, "z": 20},
+            "services": ["repair", "research"]
+          },
+          {
+            "type": "planet",
+            "subtype": "volcanic",
+            "name": "End",
+            "coordinates": {"x": -40, "y": 60, "z": -30},
+            "danger": "dangerous",
+            "enemies": ["ancient_titan", "ancient_avatar"]
+          },
+          {
+            "type": "debris_field",
+            "name": "Final Battlefield",
+            "coordinates": {"x": 70, "y": -80, "z": -60},
+            "danger": "deadly",
+            "enemies": ["ancient_avatar", "void_entity", "obsidian_avatar"]
+          }
+        ]
+      }
+    }
+  }
+}
