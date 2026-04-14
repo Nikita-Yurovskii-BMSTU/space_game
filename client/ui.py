@@ -89,8 +89,8 @@ class GameUI:
         """Отрисовка основного интерфейса"""
         layout = Layout()
         layout.split_column(
-            Layout(name="top", size=8),
-            Layout(name="middle", size=13),
+            Layout(name="top", size=6),
+            Layout(name="middle", size=15),
             Layout(name="bottom", size=9),
             Layout(name="input", size=3)
         )
@@ -98,19 +98,20 @@ class GameUI:
         # Верхняя панель
         top_lines = [
             f"[bold cyan]Пилот:[/bold cyan] {self.state.player}",
-            f"[bold cyan]Сектор:[/bold cyan] {self.state.coordinates.get('sector', '???')}",
+            f"[bold cyan]Система:[/bold cyan] {self.state.coordinates.get('system', 'nexus')}",
+            f"[bold cyan]Звезда:[/bold cyan] {self.state.coordinates.get('star', 'nexus_alpha')}",
             f"[bold cyan]Координаты:[/bold cyan] "
             f"X:{self.state.coordinates.get('x', 0):.1f} "
             f"Y:{self.state.coordinates.get('y', 0):.1f} "
             f"Z:{self.state.coordinates.get('z', 0):.1f}",
             "",
-            "[bold cyan]Команды:[/bold cyan] help, status, stats, move, damage, repair, fire, save, quit",
-            "", "", ""
+            "[bold cyan]Команды:[/bold cyan] systems, stars, scan, jump, warp, move, fire",
+            "", ""
         ][:8]
         layout["top"].update(Panel("\n".join(top_lines), title="СТАТУС КОРАБЛЯ"))
 
         # Средняя панель (логи)
-        log_lines = list(self.state.logs)[-12:]
+        log_lines = list(reversed(self.state.logs))[:14][::-1]
         cooldown_anim = self.get_cooldown_animation()
         if cooldown_anim:
             log_lines.append(cooldown_anim)

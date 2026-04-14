@@ -29,19 +29,20 @@ class Database:
             )
         ''')
 
-        # Таблица для координат
+        # Таблица для координат (обновленная)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS coordinates (
                 player_id INTEGER PRIMARY KEY,
+                system TEXT DEFAULT 'nexus',
+                star TEXT DEFAULT 'nexus_alpha',
                 x REAL DEFAULT 0,
                 y REAL DEFAULT 0,
                 z REAL DEFAULT 0,
-                sector TEXT DEFAULT 'Альфа',
                 FOREIGN KEY (player_id) REFERENCES players(player_id)
             )
         ''')
 
-        # Таблица для состояния корпуса (устаревшая, оставлена для совместимости)
+        # Таблица для состояния корпуса (устаревшая, для совместимости)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS hull (
                 player_id INTEGER PRIMARY KEY,
@@ -76,7 +77,7 @@ class Database:
             )
         ''')
 
-        # Таблица кораблей игроков (новая)
+        # Таблица кораблей игроков
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS player_ships (
                 player_id INTEGER PRIMARY KEY,
@@ -232,7 +233,7 @@ class Database:
         cursor = conn.cursor()
 
         # Координаты
-        cursor.execute("SELECT x, y, z, sector FROM coordinates WHERE player_id = ?", (player_id,))
+        cursor.execute("SELECT system, star, x, y, z FROM coordinates WHERE player_id = ?", (player_id,))
         coords = cursor.fetchone()
 
         # Инвентарь
@@ -258,14 +259,22 @@ class Database:
         state = {
             "player": player_name,
             "coordinates": {
-                "x": coords[0], "y": coords[1], "z": coords[2], "sector": coords[3]
+                "system": coords[0] if coords else "nexus",
+                "star": coords[1] if coords else "nexus_alpha",
+                "x": coords[2] if coords else 0,
+                "y": coords[3] if coords else 0,
+                "z": coords[4] if coords else 0
             },
             "inventory": {
-                "repair_kits": inventory[0], "missiles": inventory[1], "scrap": inventory[2]
+                "repair_kits": inventory[0] if inventory else 3,
+                "missiles": inventory[1] if inventory else 8,
+                "scrap": inventory[2] if inventory else 150
             },
             "stats": {
-                "enemies_defeated": stats[0], "missions_completed": stats[1],
-                "total_damage_dealt": stats[2], "total_damage_taken": stats[3]
+                "enemies_defeated": stats[0] if stats else 0,
+                "missions_completed": stats[1] if stats else 0,
+                "total_damage_dealt": stats[2] if stats else 0,
+                "total_damage_taken": stats[3] if stats else 0
             }
         }
 
@@ -281,10 +290,9 @@ class Database:
                 },
                 "installed_weapons": json.loads(ship_row[5])
             }
-            # Для обратной совместимости
             state["hull"] = state["ship"]["hull"].copy()
         else:
-            # Загружаем из старой таблицы hull (соединение ещё открыто!)
+            # Загружаем из старой таблицы hull
             cursor.execute("SELECT bow, stern, port, starboard FROM hull WHERE player_id = ?", (player_id,))
             hull = cursor.fetchone()
             if hull:
@@ -317,9 +325,9 @@ class Database:
             coords = state["coordinates"]
             cursor.execute('''
                 UPDATE coordinates 
-                SET x = ?, y = ?, z = ?, sector = ?
+                SET system = ?, star = ?, x = ?, y = ?, z = ?
                 WHERE player_id = ?
-            ''', (coords["x"], coords["y"], coords["z"], coords["sector"], player_id))
+            ''', (coords["system"], coords["star"], coords["x"], coords["y"], coords["z"], player_id))
 
             # Инвентарь
             inventory = state["inventory"]

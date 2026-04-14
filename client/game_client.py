@@ -114,6 +114,7 @@ class GameClient:
                                     break
 
                                 self.send_command(cmd)
+                                live.update(self.ui.draw_layout())  # ← принудительно обновляем сразу
                                 self.ui.current_input = ""
                                 live.update(self.ui.draw_layout())
                     except:

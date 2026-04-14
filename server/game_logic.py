@@ -8,11 +8,13 @@ class GameLogic:
     def __init__(self, database, data_loader):
         self.db = database
         self.data = data_loader
-        self.last_action_time = {}  # глобальный кулдаун
+        self.last_action_time = {}
         self.cooldown_seconds = 3
+        self.weapon_cooldowns = {}
 
-        # Кулдауны оружия
-        self.weapon_cooldowns = {}  # {player_name: {weapon: last_use_time}}
+    def _calculate_distance(self, x1, y1, z1, x2, y2, z2):
+        """Расчёт расстояния между точками"""
+        return ((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2) ** 0.5
 
     def _execute_command(self, command, state, player_name):
         """Выполнение команды без проверки кулдауна"""
@@ -20,18 +22,156 @@ class GameLogic:
         if command == CMD_HELP:
             return {"message": """Доступные команды:
 - status - показать текущий статус
-- move x 10 y 5 sector Бета - перемещение
+- systems - список всех систем
+- stars - список звёзд в текущей системе
+- scan - что вокруг (объекты в секторе)
+- jump [system] - прыжок в другую систему (через врата)
+- warp [star] - варп к другой звезде в системе
+- move x 10 y 5 z -5 - перемещение в секторе
 - damage bow 15 - нанести урон
-- repair bow 20 - отремонтировать (тратит ремкомплекты)
-- fire laser - выстрелить из оружия
-- weapons - список доступного оружия
-- ships - список доступных кораблей
-- stats - показать статистику
-- save - принудительное сохранение
-- quit - выход из игры"""}
+- repair bow 20 - отремонтировать
+- fire [weapon] - выстрелить
+- weapons - список оружия
+- stats - статистика
+- save - сохранить
+- quit - выход"""}
+
+        elif command == "systems":
+            systems = self.data.get_all_system_ids()
+            current = state["coordinates"]["system"]
+            message = f"Текущая система: {current}\nДоступные системы:\n"
+            current_sys_data = self.data.get_system(current)
+            connections = current_sys_data.get("connections", []) if current_sys_data else []
+
+            for s_id in systems:
+                sys_data = self.data.get_system(s_id)
+                if s_id == current:
+                    message += f"- {sys_data['name']} (вы здесь)\n"
+                elif s_id in connections:
+                    message += f"- {sys_data['name']} (врата доступны)\n"
+                else:
+                    message += f"- {sys_data['name']}\n"
+            return {"message": message}
+
+        elif command == "stars":
+            current_sys = state["coordinates"]["system"]
+            sys_data = self.data.get_system(current_sys)
+            if not sys_data:
+                return {"message": "Система не найдена!"}
+
+            stars = sys_data.get("stars", {})
+            current_star = state["coordinates"]["star"]
+            message = f"Звёзды в системе {sys_data['name']}:\n"
+            for star_id, star_data in stars.items():
+                if star_id == current_star:
+                    message += f"- {star_data['name']} (вы здесь)\n"
+                else:
+                    message += f"- {star_data['name']}\n"
+            return {"message": message}
+
+        elif command == "scan":
+            current_sys = state["coordinates"]["system"]
+            current_star = state["coordinates"]["star"]
+            sys_data = self.data.get_system(current_sys)
+            if not sys_data:
+                return {"message": "Система не найдена!"}
+
+            star_data = sys_data["stars"].get(current_star, {})
+            objects = star_data.get("objects", [])
+
+            if not objects:
+                return {"message": "Пустой сектор."}
+
+            message = f"Объекты в {star_data['name']}:\n"
+            for obj in objects:
+                obj_coords = obj["coordinates"]
+                dist = self._calculate_distance(
+                    state["coordinates"]["x"], state["coordinates"]["y"], state["coordinates"]["z"],
+                    obj_coords["x"], obj_coords["y"], obj_coords["z"]
+                )
+                danger = obj.get("danger", "safe")
+                danger_icon = {"safe": "🟢", "moderate": "🟡", "dangerous": "🟠", "deadly": "🔴"}.get(danger, "")
+                message += f"- {obj['name']} ({obj['type']}) на дистанции {dist:.1f} {danger_icon}\n"
+            return {"message": message}
+
+        elif command.startswith("jump "):
+            target_sys = command[5:].strip().lower()
+            current_sys = state["coordinates"]["system"]
+
+            sys_data = self.data.get_system(current_sys)
+            if not sys_data:
+                return {"message": f"Система {current_sys} не найдена!"}
+
+            if target_sys not in sys_data.get("connections", []):
+                return {"message": f"Нет врат в систему {target_sys}!"}
+
+            target_data = self.data.get_system(target_sys)
+            if not target_data:
+                return {"message": f"Система {target_sys} не найдена!"}
+
+            first_star = list(target_data["stars"].keys())[0]
+            star_data = target_data["stars"][first_star]
+
+            new_state = state.copy()
+            new_state["coordinates"] = {
+                "system": target_sys,
+                "star": first_star,
+                "x": star_data["coordinates"]["x"],
+                "y": star_data["coordinates"]["y"],
+                "z": star_data["coordinates"]["z"]
+            }
+
+            return {
+                "message": f"✨ Прыжок через врата в систему {target_data['name']}!\nВы прибыли к звезде {star_data['name']}.",
+                "state": new_state
+            }
+
+        elif command.startswith("warp "):
+            target_star = command[5:].strip().lower()
+            current_sys = state["coordinates"]["system"]
+            current_star = state["coordinates"]["star"]
+
+            if target_star == current_star:
+                return {"message": "Вы уже у этой звезды!"}
+
+            sys_data = self.data.get_system(current_sys)
+            if not sys_data:
+                return {"message": "Система не найдена!"}
+
+            stars = sys_data.get("stars", {})
+
+            if target_star not in stars:
+                return {"message": f"Звезда {target_star} не найдена в системе!"}
+
+            star_data = stars[target_star]
+
+            new_state = state.copy()
+            new_state["coordinates"] = {
+                "system": current_sys,
+                "star": target_star,
+                "x": star_data["coordinates"]["x"],
+                "y": star_data["coordinates"]["y"],
+                "z": star_data["coordinates"]["z"]
+            }
+
+            return {
+                "message": f"🚀 Варп-прыжок к звезде {star_data['name']}!",
+                "state": new_state
+            }
 
         elif command == CMD_STATUS:
-            return {"message": "Статус обновлен", "state": state}
+            coords = state["coordinates"]
+            sys_data = self.data.get_system(coords["system"])
+            sys_name = sys_data["name"] if sys_data else coords["system"]
+            star_name = coords["star"]
+            if sys_data and coords["star"] in sys_data["stars"]:
+                star_name = sys_data["stars"][coords["star"]]["name"]
+
+            message = f"""📍 Статус:
+Система: {sys_name}
+Звезда: {star_name}
+Координаты: X:{coords['x']:.1f} Y:{coords['y']:.1f} Z:{coords['z']:.1f}"""
+            return {"message": message, "state": state}
 
         elif command == CMD_STATS:
             stats = state.get("stats", {})
@@ -55,14 +195,6 @@ class GameLogic:
             for w_id in weapons:
                 w = self.data.get_weapon(w_id)
                 message += f"- {w_id}: {w['name']} (урон: {w['damage']}, кулдаун: {w['cooldown']}с)\n"
-            return {"message": message}
-
-        elif command == "ships":
-            ships = self.data.get_all_ship_ids()
-            message = "Доступные корабли:\n"
-            for s_id in ships:
-                s = self.data.get_ship(s_id)
-                message += f"- {s_id}: {s['name']} (слоты: {s['weapon_slots']})\n"
             return {"message": message}
 
         elif command.startswith(CMD_MOVE):
@@ -89,8 +221,7 @@ class GameLogic:
         now = time.time()
         last = self.last_action_time.get(player_name, 0)
 
-        # Активные команды требуют глобального кулдауна
-        if command.startswith((CMD_MOVE, CMD_DAMAGE, CMD_REPAIR, "fire")):
+        if command.startswith((CMD_MOVE, CMD_DAMAGE, CMD_REPAIR, "fire", "jump", "warp")):
             if now - last < self.cooldown_seconds:
                 remaining = self.cooldown_seconds - (now - last)
                 return {
@@ -108,7 +239,6 @@ class GameLogic:
                     }
                 return result
 
-        # Остальные команды без кулдауна
         return self._execute_command(command, state, player_name)
 
     def _handle_fire(self, command, state, player_name):
@@ -120,15 +250,13 @@ class GameLogic:
         weapon_id = parts[1]
         weapon_data = self.data.get_weapon(weapon_id)
         if not weapon_data:
-            return {"message": f"Неизвестное оружие: {weapon_id}. Доступно: {', '.join(self.data.get_all_weapon_ids())}"}
+            return {"message": f"Неизвестное оружие: {weapon_id}"}
 
-        # Проверка, установлено ли оружие на корабле
         ship = state.get("ship", {})
         installed = ship.get("installed_weapons", [])
         if weapon_id not in installed:
             return {"message": f"Оружие {weapon_id} не установлено на корабле!"}
 
-        # Проверка кулдауна оружия
         now = time.time()
         if player_name not in self.weapon_cooldowns:
             self.weapon_cooldowns[player_name] = {}
@@ -145,7 +273,6 @@ class GameLogic:
                 "message": f"{weapon_data['name']} перезаряжается... {remaining:.1f}с"
             }
 
-        # Выстрел
         self.weapon_cooldowns[player_name][weapon_id] = now
         damage = weapon_data["damage"]
 
@@ -179,14 +306,12 @@ class GameLogic:
             elif parts[i] == 'z' and i + 1 < len(parts):
                 new_state['coordinates']['z'] += float(parts[i + 1])
                 i += 2
-            elif parts[i] == 'sector' and i + 1 < len(parts):
-                new_state['coordinates']['sector'] = parts[i + 1]
-                i += 2
             else:
                 i += 1
 
+        coords = new_state['coordinates']
         return {
-            "message": f"Перемещение в сектор {new_state['coordinates']['sector']}",
+            "message": f"Перемещение: X:{coords['x']:.1f} Y:{coords['y']:.1f} Z:{coords['z']:.1f}",
             "state": new_state
         }
 
@@ -250,7 +375,6 @@ class GameLogic:
         for section in ['coordinates', 'hull', 'inventory', 'ship', 'stats']:
             if section in new_state and section in old_state:
                 if section == 'ship':
-                    # Для корабля сравниваем hull и installed_weapons
                     section_changes = {}
                     old_ship = old_state.get('ship', {})
                     new_ship = new_state.get('ship', {})
@@ -272,6 +396,13 @@ class GameLogic:
                     if old_weapons != new_weapons:
                         section_changes['installed_weapons'] = new_weapons
 
+                    if section_changes:
+                        changes[section] = section_changes
+                elif section == 'coordinates':
+                    section_changes = {}
+                    for key in new_state[section]:
+                        if key in old_state[section] and new_state[section][key] != old_state[section][key]:
+                            section_changes[key] = new_state[section][key]
                     if section_changes:
                         changes[section] = section_changes
                 elif isinstance(new_state[section], dict):
