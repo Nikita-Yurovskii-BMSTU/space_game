@@ -3,18 +3,21 @@
     "name": "Истребитель",
     "hull": {"bow": 100, "stern": 80, "port": 80, "starboard": 80},
     "weapon_slots": 2,
+    "default_weapons": ["laser"],
     "inventory": {"repair_kits": 3, "missiles": 5, "scrap": 100}
   },
   "cruiser": {
     "name": "Крейсер",
     "hull": {"bow": 150, "stern": 120, "port": 120, "starboard": 120},
     "weapon_slots": 4,
+    "default_weapons": ["laser", "missile"],
     "inventory": {"repair_kits": 5, "missiles": 10, "scrap": 200}
   },
   "dreadnought": {
     "name": "Дредноут",
     "hull": {"bow": 300, "stern": 250, "port": 250, "starboard": 250},
     "weapon_slots": 6,
+    "default_weapons": ["laser", "missile", "railgun"],
     "inventory": {"repair_kits": 10, "missiles": 20, "scrap": 500}
   }
 }

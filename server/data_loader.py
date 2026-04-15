@@ -10,16 +10,18 @@ class DataLoader:
         self.ships = {}
         self.weapons = {}
         self.systems = {}
+        self.enemies = {}  # ← добавить
         self.load_all()
 
     def load_all(self):
-        """Загрузка всех JSON файлов"""
         self.ships = self.load_json("ships.json")
         self.weapons = self.load_json("weapons.json")
         self.systems = self.load_json("systems.json")
+        self.enemies = self.load_json("enemies.json")  # ← добавить
         print(f"✓ Загружено кораблей: {len(self.ships)}")
         print(f"✓ Загружено оружия: {len(self.weapons)}")
         print(f"✓ Загружено систем: {len(self.systems)}")
+        print(f"✓ Загружено врагов: {len(self.enemies)}")  # ← добавить
 
     def load_json(self, filename):
         """Загрузка одного JSON файла"""
@@ -64,3 +66,7 @@ class DataLoader:
     def get_all_system_ids(self):
         """Список всех ID систем"""
         return list(self.systems.keys())
+
+    def get_enemy(self, enemy_id):
+        """Получить данные врага по ID"""
+        return self.enemies.get(enemy_id)

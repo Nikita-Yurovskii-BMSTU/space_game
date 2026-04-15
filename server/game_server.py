@@ -21,6 +21,29 @@ class GameServer:
         self.data = DataLoader()
         self.logic = GameLogic(self.db, self.data)
 
+        # Для EnemyLogic
+        self.player_states = {}
+        self.player_clients = {}
+        self.logic.enemy_logic.set_server(self)
+
+    def get_player_state(self, player_name):
+        """Получить состояние игрока"""
+        return self.player_states.get(player_name)
+
+    def save_player_state(self, player_name, state):
+        """Сохранить состояние игрока"""
+        self.player_states[player_name] = state
+        self.db.save_state(state)
+
+    def send_to_player(self, player_name, message):
+        """Отправить сообщение игроку"""
+        client = self.player_clients.get(player_name)
+        if client:
+            try:
+                client.send((json.dumps(message) + "\n").encode())
+            except Exception as e:
+                print(f"Ошибка отправки игроку {player_name}: {e}")
+
     def start(self):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -36,7 +59,6 @@ class GameServer:
             threading.Thread(target=self.handle_client, args=(client,), daemon=True).start()
 
     def handle_client(self, client):
-        # Этап 1: Аутентификация
         authenticated = False
         player_name = None
         token = None
@@ -93,6 +115,8 @@ class GameServer:
 
                             state = self.db.load_state(player_name)
                             if state:
+                                self.player_states[player_name] = state
+                                self.player_clients[player_name] = client
                                 client.send((json.dumps({
                                     "type": MSG_GAME_STATE,
                                     "data": state
@@ -122,9 +146,8 @@ class GameServer:
             client.close()
             return
 
-        # Этап 2: Игровой цикл
         print(f"Игрок {player_name} вошел в игру")
-        state = self.db.load_state(player_name)
+        state = self.player_states.get(player_name, {})
         last_state = state.copy() if state else None
 
         while self.running:
@@ -147,7 +170,6 @@ class GameServer:
                 response = self.logic.process_command(cmd, state, player_name)
 
                 if response and isinstance(response, dict):
-                    # Проверка на кулдаун (отказ)
                     if response.get("cooldown"):
                         client.send((json.dumps({
                             "type": MSG_COOLDOWN,
@@ -156,7 +178,6 @@ class GameServer:
                         }) + "\n").encode())
                         continue
 
-                    # Проверка на кулдаун оружия (отказ)
                     if response.get("weapon_cooldown"):
                         client.send((json.dumps({
                             "type": MSG_WEAPON_COOLDOWN,
@@ -166,11 +187,11 @@ class GameServer:
                         }) + "\n").encode())
                         continue
 
-                    # Отправка изменений состояния
                     if 'state' in response:
                         new_state = response['state']
                         if new_state != last_state:
                             self.db.save_state(new_state)
+                            self.player_states[player_name] = new_state
                             changes = self.logic.get_changes(last_state, new_state)
                             if changes:
                                 client.send((json.dumps({
@@ -180,14 +201,12 @@ class GameServer:
                             last_state = new_state.copy()
                             state = new_state
 
-                    # Отправка сообщения
                     if 'message' in response:
                         client.send((json.dumps({
                             "type": MSG_MESSAGE,
                             "data": response['message']
                         }) + "\n").encode())
 
-                    # Отправка глобального кулдауна после выполнения
                     if response.get("cooldown_after"):
                         cd = response["cooldown_after"]
                         client.send((json.dumps({
@@ -196,7 +215,6 @@ class GameServer:
                             "message": cd["message"]
                         }) + "\n").encode())
 
-                    # Отправка кулдауна оружия после выстрела
                     if response.get("weapon_cooldown_after"):
                         wc = response["weapon_cooldown_after"]
                         client.send((json.dumps({
@@ -211,10 +229,16 @@ class GameServer:
                 break
 
         self.auth.remove_session(token)
+        if player_name in self.player_states:
+            del self.player_states[player_name]
+        if player_name in self.player_clients:
+            del self.player_clients[player_name]
+        self.logic.enemy_logic.end_combat(player_name)
         client.close()
         print(f"Игрок {player_name} отключился")
 
     def stop(self):
         self.running = False
+        self.logic.enemy_logic.stop()
         if hasattr(self, 'server_socket'):
             self.server_socket.close()

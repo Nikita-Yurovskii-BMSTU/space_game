@@ -100,7 +100,7 @@ class Database:
         """Хеширование пароля"""
         return hashlib.sha256(password.encode()).hexdigest()
 
-    def create_player(self, player_name, password):
+    def create_player(self, player_name, password, starting_ship="fighter"):
         """Создание нового игрока"""
         conn = sqlite3.connect(self.db_file)
         cursor = conn.cursor()
@@ -113,19 +113,37 @@ class Database:
             )
             player_id = cursor.lastrowid
 
-            # Создаем записи для нового игрока
+            # Загружаем данные корабля из JSON (через DataLoader)
+            from server.data_loader import DataLoader
+            data = DataLoader()
+            ship_data = data.get_ship(starting_ship)
+
+            if ship_data:
+                hull = ship_data["hull"]
+                default_weapons = ship_data.get("default_weapons", ["laser"])
+            else:
+                hull = {"bow": 100, "stern": 80, "port": 80, "starboard": 80}
+                default_weapons = ["laser"]
+
             cursor.execute("INSERT INTO coordinates (player_id) VALUES (?)", (player_id,))
             cursor.execute("INSERT INTO hull (player_id) VALUES (?)", (player_id,))
             cursor.execute("INSERT INTO inventory (player_id) VALUES (?)", (player_id,))
             cursor.execute("INSERT INTO stats (player_id) VALUES (?)", (player_id,))
 
-            # Создаем корабль по умолчанию
             cursor.execute('''
                 INSERT INTO player_ships 
                 (player_id, ship_id, current_hull_bow, current_hull_stern, 
                  current_hull_port, current_hull_starboard, installed_weapons)
-                VALUES (?, 'fighter', 100, 80, 80, 80, ?)
-            ''', (player_id, json.dumps(["laser"])))
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                player_id,
+                starting_ship,
+                hull["bow"],
+                hull["stern"],
+                hull["port"],
+                hull["starboard"],
+                json.dumps(default_weapons)
+            ))
 
             conn.commit()
             return True, "Игрок успешно создан!"

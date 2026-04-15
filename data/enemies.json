@@ -1,0 +1,112 @@
+{
+  "pirate_scout": {
+    "name": "Пиратский скаут",
+    "faction": "pirates",
+    "hull": {"bow": 30, "stern": 25, "port": 25, "starboard": 25},
+    "weapons": ["laser"],
+    "damage": 10,
+    "attack_cooldown": 7,
+    "attack_range": 50,
+    "speed": 10,
+    "loot": {"scrap": 20, "repair_kits": 0}
+  },
+  "pirate_fighter": {
+    "name": "Пиратский истребитель",
+    "faction": "pirates",
+    "hull": {"bow": 50, "stern": 40, "port": 40, "starboard": 40},
+    "weapons": ["laser", "missile"],
+    "damage": 15,
+    "attack_cooldown": 7,
+    "attack_range": 60,
+    "speed": 15,
+    "loot": {"scrap": 40, "repair_kits": 1}
+  },
+  "crimson_scout": {
+    "name": "Скаут Алого Флота",
+    "faction": "crimson",
+    "hull": {"bow": 40, "stern": 35, "port": 35, "starboard": 35},
+    "weapons": ["laser"],
+    "damage": 15,
+    "attack_cooldown": 3,
+    "attack_range": 55,
+    "speed": 12,
+    "loot": {"scrap": 30, "repair_kits": 0}
+  },
+  "crimson_fighter": {
+    "name": "Истребитель Алого Флота",
+    "faction": "crimson",
+    "hull": {"bow": 70, "stern": 60, "port": 60, "starboard": 60},
+    "weapons": ["laser", "railgun"],
+    "damage": 20,
+    "attack_cooldown": 3,
+    "attack_range": 70,
+    "speed": 12,
+    "loot": {"scrap": 60, "repair_kits": 1}
+  },
+  "crimson_cruiser": {
+    "name": "Крейсер Алого Флота",
+    "faction": "crimson",
+    "hull": {"bow": 150, "stern": 120, "port": 120, "starboard": 120},
+    "weapons": ["missile", "railgun"],
+    "damage": 30,
+    "attack_cooldown": 4,
+    "attack_range": 80,
+    "speed": 8,
+    "loot": {"scrap": 150, "repair_kits": 3}
+  },
+  "obsidian_acolyte": {
+    "name": "Аколит Обсидиана",
+    "faction": "obsidian",
+    "hull": {"bow": 80, "stern": 70, "port": 70, "starboard": 70},
+    "weapons": ["plasma"],
+    "damage": 25,
+    "attack_cooldown": 3,
+    "attack_range": 65,
+    "speed": 10,
+    "loot": {"scrap": 80, "repair_kits": 1, "dark_matter": 5}
+  },
+  "obsidian_priest": {
+    "name": "Жрец Обсидиана",
+    "faction": "obsidian",
+    "hull": {"bow": 120, "stern": 100, "port": 100, "starboard": 100},
+    "weapons": ["plasma", "railgun"],
+    "damage": 35,
+    "attack_cooldown": 4,
+    "attack_range": 75,
+    "speed": 7,
+    "loot": {"scrap": 120, "repair_kits": 2, "dark_matter": 10}
+  },
+  "ancient_drone": {
+    "name": "Древний дрон",
+    "faction": "ancient",
+    "hull": {"bow": 60, "stern": 50, "port": 50, "starboard": 50},
+    "weapons": ["laser"],
+    "damage": 20,
+    "attack_cooldown": 2,
+    "attack_range": 60,
+    "speed": 15,
+    "loot": {"scrap": 50, "ancient_artifact": 1}
+  },
+  "ancient_sentinel": {
+    "name": "Древний страж",
+    "faction": "ancient",
+    "hull": {"bow": 100, "stern": 90, "port": 90, "starboard": 90},
+    "weapons": ["railgun", "plasma"],
+    "damage": 40,
+    "attack_cooldown": 5,
+    "attack_range": 90,
+    "speed": 5,
+    "loot": {"scrap": 100, "ancient_artifact": 3}
+  },
+  "ancient_guardian": {
+    "name": "Древний хранитель",
+    "faction": "ancient",
+    "hull": {"bow": 200, "stern": 180, "port": 180, "starboard": 180},
+    "weapons": ["railgun", "plasma", "missile"],
+    "damage": 50,
+    "attack_cooldown": 5,
+    "attack_range": 100,
+    "speed": 3,
+    "loot": {"scrap": 250, "repair_kits": 5, "ancient_artifact": 5}
+  }
+}

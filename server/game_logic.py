@@ -2,6 +2,8 @@
 
 from common.protocols import *
 import time
+import random
+from server.enemy_logic import EnemyLogic
 
 
 class GameLogic:
@@ -11,13 +13,14 @@ class GameLogic:
         self.last_action_time = {}
         self.cooldown_seconds = 3
         self.weapon_cooldowns = {}
+        self.enemy_logic = EnemyLogic(data_loader)
+        self.auto_attack = {}  # {player_name: {"weapon": weapon_id, "active": True}}
+
 
     def _calculate_distance(self, x1, y1, z1, x2, y2, z2):
-        """Расчёт расстояния между точками"""
         return ((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2) ** 0.5
 
     def _execute_command(self, command, state, player_name):
-        """Выполнение команды без проверки кулдауна"""
 
         if command == CMD_HELP:
             return {"message": """Доступные команды:
@@ -25,16 +28,21 @@ class GameLogic:
 - systems - список всех систем
 - stars - список звёзд в текущей системе
 - scan - что вокруг (объекты в секторе)
-- jump [system] - прыжок в другую систему (через врата)
-- warp [star] - варп к другой звезде в системе
-- move x 10 y 5 z -5 - перемещение в секторе
-- damage bow 15 - нанести урон
-- repair bow 20 - отремонтировать
+- jump [system] - прыжок в другую систему
+- warp [star] - варп к другой звезде
+- move x 10 y 5 z -5 - перемещение
+- attack [имя] - атаковать врага
 - fire [weapon] - выстрелить
-- weapons - список оружия
+- flee - сбежать из боя
+- repair bow 20 - отремонтировать
 - stats - статистика
 - save - сохранить
 - quit - выход"""}
+        elif command.startswith("auto "):
+            return self._handle_auto(command, state, player_name)
+
+        elif command == "auto off":
+            return self._handle_auto_off(player_name)
 
         elif command == "systems":
             systems = self.data.get_all_system_ids()
@@ -91,12 +99,29 @@ class GameLogic:
                 )
                 danger = obj.get("danger", "safe")
                 danger_icon = {"safe": "🟢", "moderate": "🟡", "dangerous": "🟠", "deadly": "🔴"}.get(danger, "")
-                message += f"- {obj['name']} ({obj['type']}) на дистанции {dist:.1f} {danger_icon}\n"
+
+                if obj["type"] == "station":
+                    message += f"- 🛸 {obj['name']} (станция) на дистанции {dist:.1f}\n"
+                elif obj["type"] == "planet":
+                    message += f"- 🪐 {obj['name']} (планета) на дистанции {dist:.1f}\n"
+                elif obj["type"] in ["belt", "debris_field", "ice_field"]:
+                    message += f"- ☄️ {obj['name']} (пояс) на дистанции {dist:.1f} {danger_icon}\n"
+                    if "enemies" in obj:
+                        message += f"  Враги: {', '.join(obj['enemies'])}\n"
+
+            combat_info = self.enemy_logic.get_combat_info(player_name)
+            if combat_info:
+                hull_percent = (combat_info["total_hull"] / combat_info["max_hull"]) * 100 if combat_info["max_hull"] > 0 else 0
+                message += f"\n⚔️ В БОЮ: {combat_info['enemy_name']} ({hull_percent:.0f}% HP) на дистанции {combat_info['distance']:.1f}"
+
             return {"message": message}
 
         elif command.startswith("jump "):
             target_sys = command[5:].strip().lower()
             current_sys = state["coordinates"]["system"]
+
+            if self.enemy_logic.is_in_combat(player_name):
+                return {"message": "Нельзя прыгать во время боя! Используйте 'flee' для побега."}
 
             sys_data = self.data.get_system(current_sys)
             if not sys_data:
@@ -130,6 +155,9 @@ class GameLogic:
             target_star = command[5:].strip().lower()
             current_sys = state["coordinates"]["system"]
             current_star = state["coordinates"]["star"]
+
+            if self.enemy_logic.is_in_combat(player_name):
+                return {"message": "Нельзя варпать во время боя! Используйте 'flee' для побега."}
 
             if target_star == current_star:
                 return {"message": "Вы уже у этой звезды!"}
@@ -171,6 +199,11 @@ class GameLogic:
 Система: {sys_name}
 Звезда: {star_name}
 Координаты: X:{coords['x']:.1f} Y:{coords['y']:.1f} Z:{coords['z']:.1f}"""
+
+            combat_info = self.enemy_logic.get_combat_info(player_name)
+            if combat_info:
+                message += f"\n⚔️ В бою с {combat_info['enemy_name']} ({combat_info['total_hull']}/{combat_info['max_hull']} HP)"
+
             return {"message": message, "state": state}
 
         elif command == CMD_STATS:
@@ -197,11 +230,14 @@ class GameLogic:
                 message += f"- {w_id}: {w['name']} (урон: {w['damage']}, кулдаун: {w['cooldown']}с)\n"
             return {"message": message}
 
-        elif command.startswith(CMD_MOVE):
-            return self._handle_move(command, state)
+        elif command.startswith("attack "):
+            return self._handle_attack(command, state, player_name)
 
-        elif command.startswith(CMD_DAMAGE):
-            return self._handle_damage(command, state)
+        elif command == "flee":
+            return self._handle_flee(state, player_name)
+
+        elif command.startswith(CMD_MOVE):
+            return self._handle_move(command, state, player_name)
 
         elif command.startswith(CMD_REPAIR):
             return self._handle_repair(command, state)
@@ -210,18 +246,24 @@ class GameLogic:
             return self._handle_fire(command, state, player_name)
 
         elif command == CMD_QUIT:
+            self.enemy_logic.end_combat(player_name)
             return {"message": "До свидания!"}
+
+        elif command == "inv" or command == "inventory":
+            inventory = state.get("inventory", {})
+            message = "🎒 Инвентарь:\n"
+            for k, v in inventory.items():
+                message += f"- {k}: {v}\n"
+            return {"message": message}
 
         else:
             return {"message": f"Неизвестная команда: {command}"}
 
     def process_command(self, command, state, player_name):
-        """Обработка игровых команд с кулдауном"""
-
         now = time.time()
         last = self.last_action_time.get(player_name, 0)
 
-        if command.startswith((CMD_MOVE, CMD_DAMAGE, CMD_REPAIR, "fire", "jump", "warp")):
+        if command.startswith((CMD_MOVE, "fire", "jump", "warp", "attack", "flee", CMD_REPAIR)):
             if now - last < self.cooldown_seconds:
                 remaining = self.cooldown_seconds - (now - last)
                 return {
@@ -232,7 +274,7 @@ class GameLogic:
             else:
                 self.last_action_time[player_name] = now
                 result = self._execute_command(command, state, player_name)
-                if result and not result.get("weapon_cooldown"):
+                if result and not result.get("weapon_cooldown") and not result.get("cooldown"):
                     result["cooldown_after"] = {
                         "remaining": self.cooldown_seconds,
                         "message": "Системы перезаряжаются..."
@@ -241,8 +283,59 @@ class GameLogic:
 
         return self._execute_command(command, state, player_name)
 
+    def _handle_attack(self, command, state, player_name):
+        target_name = command[7:].strip()
+
+        current_sys = state["coordinates"]["system"]
+        current_star = state["coordinates"]["star"]
+        sys_data = self.data.get_system(current_sys)
+        if not sys_data:
+            return {"message": "Система не найдена!"}
+
+        star_data = sys_data["stars"].get(current_star, {})
+        objects = star_data.get("objects", [])
+
+        target_obj = None
+        for obj in objects:
+            if obj.get("name", "").lower() == target_name.lower():
+                target_obj = obj
+                break
+
+        if not target_obj:
+            return {"message": f"Цель '{target_name}' не найдена!"}
+
+        if "enemies" not in target_obj:
+            return {"message": f"{target_obj['name']} не является врагом!"}
+
+        enemy_id = target_obj["enemies"][0]
+
+        combat_data = self.enemy_logic.start_combat(player_name, enemy_id, target_obj["coordinates"], state)
+        if not combat_data:
+            return {"message": f"Неизвестный враг: {enemy_id}"}
+
+        enemy_data = combat_data["enemy_data"]
+
+        return {
+            "message": f"⚔️ Бой начат с {enemy_data['name']}! Дистанция: {combat_data['distance']:.1f}\nHP врага: {sum(enemy_data['hull'].values())}"
+        }
+
+    def _handle_flee(self, state, player_name):
+        if not self.enemy_logic.is_in_combat(player_name):
+            return {"message": "Вы не в бою!"}
+
+        combat_info = self.enemy_logic.get_combat_info(player_name)
+        enemy_name = combat_info["enemy_name"]
+        distance = combat_info["distance"]
+
+        flee_chance = min(0.9, 0.3 + distance / 200)
+
+        if random.random() < flee_chance:
+            self.enemy_logic.end_combat(player_name)
+            return {"message": f"🏃 Вы успешно сбежали от {enemy_name}!"}
+        else:
+            return {"message": f"❌ Не удалось сбежать от {enemy_name}!"}
+
     def _handle_fire(self, command, state, player_name):
-        """Обработка выстрела из оружия"""
         parts = command.split()
         if len(parts) != 2:
             return {"message": "Использование: fire [weapon_id]"}
@@ -276,12 +369,39 @@ class GameLogic:
         self.weapon_cooldowns[player_name][weapon_id] = now
         damage = weapon_data["damage"]
 
+        if self.enemy_logic.is_in_combat(player_name):
+            hit_result, error = self.enemy_logic.player_hit_enemy(player_name, weapon_id, state)
+
+            if error:
+                return {"message": error}
+
+            if hit_result.get("enemy_destroyed"):
+                return {
+                    "message": hit_result["message"],
+                    "state": hit_result["state"],
+                    "weapon_cooldown_after": {
+                        "weapon": weapon_id,
+                        "remaining": cooldown_time,
+                        "message": f"{weapon_data['name']} перезаряжается..."
+                    }
+                }
+
+            return {
+                "message": hit_result["message"],
+                "state": hit_result["state"],
+                "weapon_cooldown_after": {
+                    "weapon": weapon_id,
+                    "remaining": cooldown_time,
+                    "message": f"{weapon_data['name']} перезаряжается..."
+                }
+            }
+
         new_state = state.copy()
         new_state['stats'] = state.get('stats', {}).copy()
         new_state['stats']['total_damage_dealt'] = new_state['stats'].get('total_damage_dealt', 0) + damage
 
         return {
-            "message": f"💥 Выстрел из {weapon_data['name']}! Нанесено {damage} урона.",
+            "message": f"💥 Выстрел из {weapon_data['name']}!",
             "state": new_state,
             "weapon_cooldown_after": {
                 "weapon": weapon_id,
@@ -290,7 +410,7 @@ class GameLogic:
             }
         }
 
-    def _handle_move(self, command, state):
+    def _handle_move(self, command, state, player_name):
         parts = command.split()
         new_state = state.copy()
         new_state['coordinates'] = state['coordinates'].copy()
@@ -310,34 +430,16 @@ class GameLogic:
                 i += 1
 
         coords = new_state['coordinates']
+        message = f"Перемещение: X:{coords['x']:.1f} Y:{coords['y']:.1f} Z:{coords['z']:.1f}"
+
+        combat_info = self.enemy_logic.get_combat_info(player_name)
+        if combat_info:
+            message += f"\nДистанция до врага: {combat_info['distance']:.1f}"
+
         return {
-            "message": f"Перемещение: X:{coords['x']:.1f} Y:{coords['y']:.1f} Z:{coords['z']:.1f}",
+            "message": message,
             "state": new_state
         }
-
-    def _handle_damage(self, command, state):
-        parts = command.split()
-        if len(parts) == 3:
-            part, value = parts[1], int(parts[2])
-            new_state = state.copy()
-            new_state['hull'] = state['hull'].copy()
-            if 'ship' in new_state:
-                new_state['ship'] = state['ship'].copy()
-                new_state['ship']['hull'] = state['ship']['hull'].copy()
-            new_state['stats'] = state.get('stats', {}).copy()
-
-            if part in new_state['hull']:
-                new_state['hull'][part] = max(0, new_state['hull'][part] - value)
-                if 'ship' in new_state:
-                    new_state['ship']['hull'][part] = new_state['hull'][part]
-                new_state['stats']['total_damage_taken'] = \
-                    new_state['stats'].get('total_damage_taken', 0) + value
-                return {
-                    "message": f"⚠ Нанесен урон {part}: -{value}",
-                    "state": new_state
-                }
-
-        return {"message": "Неверный формат. Используйте: damage [часть] [значение]"}
 
     def _handle_repair(self, command, state):
         parts = command.split()
@@ -419,3 +521,101 @@ class GameLogic:
                 changes[section] = new_state[section]
 
         return changes
+
+    def _handle_auto(self, command, state, player_name):
+        """Включить авто-атаку"""
+        parts = command.split()
+        if len(parts) != 2:
+            return {"message": "Использование: auto [weapon_id] или auto off"}
+
+        weapon_id = parts[1]
+        weapon_data = self.data.get_weapon(weapon_id)
+        if not weapon_data:
+            return {"message": f"Неизвестное оружие: {weapon_id}"}
+
+        ship = state.get("ship", {})
+        installed = ship.get("installed_weapons", [])
+        if weapon_id not in installed:
+            return {"message": f"Оружие {weapon_id} не установлено на корабле!"}
+
+        self.auto_attack[player_name] = {
+            "weapon": weapon_id,
+            "active": True
+        }
+
+        return {"message": f"🔄 Авто-атака включена: {weapon_data['name']}"}
+
+    def _handle_auto_off(self, player_name):
+        """Выключить авто-атаку"""
+        if player_name in self.auto_attack:
+            del self.auto_attack[player_name]
+            return {"message": "🔴 Авто-атака выключена"}
+        return {"message": "Авто-атака не была включена"}
+
+    def process_auto_attacks(self):
+        """Обработка авто-атак (вызывается из фонового потока)"""
+        for player_name, auto_data in list(self.auto_attack.items()):
+            if not auto_data["active"]:
+                continue
+
+            if not self.enemy_logic.is_in_combat(player_name):
+                continue
+
+            state = self.enemy_logic.server.get_player_state(player_name) if self.enemy_logic.server else None
+            if not state:
+                continue
+
+            weapon_id = auto_data["weapon"]
+
+            # Проверяем кулдаун оружия
+            now = time.time()
+            if player_name not in self.weapon_cooldowns:
+                self.weapon_cooldowns[player_name] = {}
+
+            last_fire = self.weapon_cooldowns[player_name].get(weapon_id, 0)
+            weapon_data = self.data.get_weapon(weapon_id)
+            if not weapon_data:
+                continue
+
+            if now - last_fire < weapon_data["cooldown"]:
+                continue  # кулдаун ещё не прошёл
+
+            # Атакуем!
+            self.weapon_cooldowns[player_name][weapon_id] = now
+
+            hit_result, error = self.enemy_logic.player_hit_enemy(player_name, weapon_id, state)
+
+            if error:
+                continue
+
+            if hit_result:
+                if self.enemy_logic.server:
+                    # Отправляем обновление состояния
+                    if "state" in hit_result:
+                        self.enemy_logic.server.save_player_state(player_name, hit_result["state"])
+                        self.enemy_logic.server.send_to_player(player_name, {
+                            "type": "update",
+                            "data": {"hull": hit_result["state"]["hull"]}
+                        })
+
+                    # Отправляем сообщение
+                    self.enemy_logic.server.send_to_player(player_name, {
+                        "type": "message",
+                        "data": f"[cyan]🔄 {hit_result['message']}[/cyan]"
+                    })
+
+                    # Отправляем кулдаун оружия
+                    self.enemy_logic.server.send_to_player(player_name, {
+                        "type": "weapon_cooldown",
+                        "weapon": weapon_id,
+                        "remaining": weapon_data["cooldown"],
+                        "message": f"{weapon_data['name']} перезаряжается..."
+                    })
+
+                    # Если враг уничтожен - выключаем авто-атаку
+                    if hit_result.get("enemy_destroyed"):
+                        auto_data["active"] = False
+                        self.enemy_logic.server.send_to_player(player_name, {
+                            "type": "message",
+                            "data": "[yellow]🔴 Авто-атака остановлена (враг уничтожен)[/yellow]"
+                        })

@@ -12,7 +12,10 @@ class ClientState:
         self.inventory = DEFAULT_INVENTORY.copy()
         self.weapons = DEFAULT_WEAPONS.copy()
         self.stats = DEFAULT_STATS.copy()
-        self.logs = deque(maxlen=14)
+        self.logs = deque(maxlen=100)  # храним больше строк
+        self.log_scroll_offset = 0  # 0 = показываем последние строки
+        self.ship = {"ship_id": "fighter", "hull": {}, "installed_weapons": []}
+
 
     def update_full(self, data):
         """Полное обновление состояния"""
@@ -76,7 +79,11 @@ class ClientState:
             self.stats.update(data['stats'])
 
     def add_log(self, text):
-        """Добавление записи в лог"""
         from datetime import datetime
         timestamp = datetime.now().strftime('%H:%M:%S')
-        self.logs.append(f"[dim]{timestamp}[/dim] {text}")
+        lines = text.split('\n')
+        for i, line in enumerate(reversed(lines)):  # разворачиваем чтобы первая строка была сверху
+            if i == 0:
+                self.logs.appendleft(f"[dim]{timestamp}[/dim] {line}")
+            else:
+                self.logs.appendleft(f"   {line}")

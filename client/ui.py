@@ -20,9 +20,16 @@ class GameUI:
         self.cooldown_start_time = 0
         self.animation_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
         self.animation_index = 0
+        self.shake_frames = 0  # счётчик кадров тряски
+        self.shake_intensity = 0  # сила тряски
 
         # Кулдауны оружия
         self.weapon_cooldowns = {}  # {weapon: {"active": True, "remaining": 5, "start_time": timestamp}}
+
+    def shake(self, intensity=3, duration=5):
+        """Запустить тряску экрана"""
+        self.shake_frames = duration
+        self.shake_intensity = intensity
 
     def set_cooldown(self, remaining, message=""):
         """Установка глобального кулдауна"""
@@ -89,39 +96,44 @@ class GameUI:
         """Отрисовка основного интерфейса"""
         layout = Layout()
         layout.split_column(
-            Layout(name="top", size=6),
-            Layout(name="middle", size=15),
+            Layout(name="top", size=5),
+            Layout(name="middle", size=20),
             Layout(name="bottom", size=9),
             Layout(name="input", size=3)
         )
 
         # Верхняя панель
         top_lines = [
-            f"[bold cyan]Пилот:[/bold cyan] {self.state.player}",
-            f"[bold cyan]Система:[/bold cyan] {self.state.coordinates.get('system', 'nexus')}",
-            f"[bold cyan]Звезда:[/bold cyan] {self.state.coordinates.get('star', 'nexus_alpha')}",
-            f"[bold cyan]Координаты:[/bold cyan] "
-            f"X:{self.state.coordinates.get('x', 0):.1f} "
-            f"Y:{self.state.coordinates.get('y', 0):.1f} "
-            f"Z:{self.state.coordinates.get('z', 0):.1f}",
+            f"[bold cyan]Пилот:[/bold cyan] {self.state.player} | Система: {self.state.coordinates.get('system', 'nexus')} | Звезда: {self.state.coordinates.get('star', 'nexus_alpha')}",
+            f"[bold cyan]Координаты:[/bold cyan] X:{self.state.coordinates.get('x', 0):.1f} Y:{self.state.coordinates.get('y', 0):.1f} Z:{self.state.coordinates.get('z', 0):.1f}",
             "",
-            "[bold cyan]Команды:[/bold cyan] systems, stars, scan, jump, warp, move, fire",
-            "", ""
-        ][:8]
-        layout["top"].update(Panel("\n".join(top_lines), title="СТАТУС КОРАБЛЯ"))
+            "[bold cyan]Команды:[/bold cyan] systems, stars, scan, jump, warp, move, fire, status",
+            ""
+        ][:5]
+        layout["top"].update(Panel("\n".join(top_lines), title="СТАТУС КОРАБЛЯ", height=5))
 
         # Средняя панель (логи)
-        log_lines = list(reversed(self.state.logs))[:14][::-1]
+        all_logs = list(self.state.logs)
+        visible_lines = 18
+
+        # Берём ПЕРВЫЕ строки (новые сверху)
+        if len(all_logs) > visible_lines:
+            log_lines = all_logs[:visible_lines]  # первые 18
+        else:
+            log_lines = all_logs[:]
+            # Дополняем пустыми строками СНИЗУ
+            while len(log_lines) < visible_lines:
+                log_lines.append("")
+
+        # Кулдаун в первую строку (сверху)
         cooldown_anim = self.get_cooldown_animation()
         if cooldown_anim:
-            log_lines.append(cooldown_anim)
-        else:
-            log_lines.append("")
+            if log_lines:
+                log_lines[0] = cooldown_anim
+            else:
+                log_lines = [cooldown_anim] + [""] * (visible_lines - 1)
 
-        while len(log_lines) < 11:
-            log_lines.append("")
-
-        layout["middle"].update(Panel("\n".join(log_lines), title="ЛОГИ СОБЫТИЙ"))
+        layout["middle"].update(Panel("\n".join(log_lines), title="ЛОГИ СОБЫТИЙ", height=visible_lines))
 
         # Нижняя панель
         from rich.layout import Layout as RowLayout
@@ -135,7 +147,17 @@ class GameUI:
         # Панель ввода
         prompt = "> " if self.authenticated else "🔐 "
         display = prompt + self.current_input
-        layout["input"].update(Panel(display, title="ВВОД КОМАНДЫ (Enter для отправки)", style="bright_blue"))
+        layout["input"].update(Panel(display, title="ВВОД КОМАНДЫ (Enter для отправки)", style="bright_blue", height=3))
+
+        if self.shake_frames > 0:
+            import random
+            offset_x = random.randint(-self.shake_intensity, self.shake_intensity)
+            offset_y = random.randint(-self.shake_intensity, self.shake_intensity)
+            self.shake_frames -= 1
+
+            # Добавляем отступы для эффекта тряски
+            shake_padding = " " * abs(offset_x) if offset_x > 0 else ""
+            # Но это не сработает с Layout, поэтому просто добавим в логи
 
         return layout
 
@@ -167,24 +189,24 @@ class GameUI:
 
     def _draw_weapons_and_inventory(self):
         """Отрисовка вооружения и инвентаря"""
-        if not self.state.weapons and not self.state.inventory:
-            return "Нет данных"
-
         lines = []
-        lines.append("[bold]Оружие:[/bold]")
+        lines.append("[bold]Установленное оружие:[/bold]")
 
-        # Отрисовка оружия с кулдаунами
-        for weapon in ["laser", "missile", "railgun"]:
-            if weapon in self.state.weapons:
-                status = self.state.weapons[weapon]
+        # Показываем только установленное оружие
+        installed = self.state.ship.get('installed_weapons', [])
+        if installed:
+            for weapon in installed:
+                # Получаем статус оружия из state.weapons
+                status = self.state.weapons.get(weapon, 100)
                 col = "green" if status >= 70 else "yellow" if status >= 30 else "red"
 
-                # Проверяем кулдаун
                 cd_bar = self.get_weapon_cooldown_bar(weapon)
                 if cd_bar:
                     lines.append(f"  {weapon}: [{col}]{status}%[/] {cd_bar}")
                 else:
                     lines.append(f"  {weapon}: [{col}]{status}%[/] [green]✓[/]")
+        else:
+            lines.append("  [dim]нет оружия[/dim]")
 
         lines.append("")
         lines.append("[bold]Инвентарь:[/bold]")
