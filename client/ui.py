@@ -253,9 +253,15 @@ class GameUI:
         return "[dim]-[/]"
 
     def _fmt_dist(self, dist):
-        if dist < 1000:
-            return f"{dist:.0f}m"
-        elif dist < 1000000:
-            return f"{dist/1000:.0f}km"
+        """Форматирование дистанции в АЕ"""
+        if dist < 0.01:
+            # Меньше 0.01 АЕ = меньше 1.5 млн км → показываем в тысячах км
+            km = dist * 149597.87  # переводим в тысячи км (1 АЕ = 149 597 870 км = 149 597.87 тыс км)
+            if km < 1000:
+                return f"{km:.0f}kкм"
+            else:
+                return f"{km / 1000:.1f}Mкм"
+        elif dist < 1:
+            return f"{dist * 1000:.0f}mАЕ"  # милли-АЕ
         else:
-            return f"{dist/1000000:.1f}au"
+            return f"{dist:.2f}АЕ"

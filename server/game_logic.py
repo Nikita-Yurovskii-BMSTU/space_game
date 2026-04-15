@@ -4,6 +4,7 @@ from common.protocols import *
 import time
 import random
 import threading
+import math
 from server.enemy_logic import EnemyLogic
 
 
@@ -17,11 +18,19 @@ class GameLogic:
         self.enemy_logic = EnemyLogic(data_loader)
         self.auto_attack = {}
         self.enemy_hp_cache = {}
-        self.player_targets = {}  # {player_name: target_object}
+        self.player_targets = {}
         self.auto_attack_lock = threading.Lock()
 
+        # Таймеры перемещения
+        self.move_timers = {}  # {player_name: {"end_time": timestamp, "target_coords": {...}, "type": "move/warp"}}
+
     def _calculate_distance(self, x1, y1, z1, x2, y2, z2):
-        return ((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2) ** 0.5
+        return math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2)
+
+    def _calculate_travel_time(self, distance, speed):
+        """Расчёт времени в секундах (не больше 20)"""
+        time_sec = distance / speed
+        return min(time_sec, 20.0)
 
     def _get_overview(self, state, player_name):
         """Получить обзор объектов вокруг игрока"""
@@ -358,12 +367,28 @@ class GameLogic:
 
         stars = sys_data.get("stars", {})
         current_star = state["coordinates"]["star"]
-        message = f"Звёзды в системе {sys_data['name']}:\n"
+        message = f"✨ Звёзды в системе {sys_data['name']}:\n"
+
         for star_id, star_data in stars.items():
             if star_id == current_star:
-                message += f"- {star_data['name']} (вы здесь)\n"
+                message += f"  🌟 {star_data['name']} (вы здесь)\n"
             else:
-                message += f"- {star_data['name']}\n"
+                dist = self._calculate_distance(
+                    state["coordinates"]["x"], state["coordinates"]["y"], state["coordinates"]["z"],
+                    star_data["coordinates"]["x"], star_data["coordinates"]["y"], star_data["coordinates"]["z"]
+                )
+                travel_time = self._calculate_travel_time(dist, WARP_SPEED)
+
+                # Форматируем дистанцию
+                if dist < 0.01:
+                    dist_str = f"{dist * 149597.87:.0f}тыс.км"
+                elif dist < 1:
+                    dist_str = f"{dist * 1000:.0f}мАЕ"
+                else:
+                    dist_str = f"{dist:.2f}АЕ"
+
+                message += f"  ⭐ {star_data['name']} (дист: {dist_str}, варп: {travel_time:.1f}с)\n"
+
         return {"message": message}
 
     def _handle_jump(self, command, state, player_name):
@@ -392,94 +417,203 @@ class GameLogic:
         first_star = list(target_data["stars"].keys())[0]
         star_data = target_data["stars"][first_star]
 
-        new_state = state.copy()
-        new_state["coordinates"] = {
-            "system": target_sys,
-            "star": first_star,
-            "x": star_data["coordinates"]["x"],
-            "y": star_data["coordinates"]["y"],
-            "z": star_data["coordinates"]["z"]
+        travel_time = JUMP_SPEED
+
+        # Запускаем таймер прыжка
+        self.move_timers[player_name] = {
+            "end_time": time.time() + travel_time,
+            "target_coords": {
+                "system": target_sys,
+                "star": first_star,
+                "x": star_data["coordinates"]["x"],
+                "y": star_data["coordinates"]["y"],
+                "z": star_data["coordinates"]["z"]
+            },
+            "type": "jump",
+            "start_state": state.copy()
         }
 
-        # Очищаем цель при прыжке
-        if player_name in self.player_targets:
-            del self.player_targets[player_name]
-
         return {
-            "message": f"✨ Прыжок через врата в систему {target_data['name']}!\nВы прибыли к звезде {star_data['name']}.",
-            "state": new_state,
-            "target_cleared": True
+            "travel": True,
+            "travel_time": travel_time,
+            "travel_type": "jump",
+            "message": f"✨ Прыжок через врата в систему {target_data['name']}... прибытие через {travel_time:.1f}с"
         }
 
     def _handle_warp(self, command, state, player_name):
-        """Варп к другой звезде"""
+        """Варп к другой звезде или объекту"""
         parts = command.split()
-        if len(parts) != 2:
-            return {"message": "Использование: warp [star]"}
+        if len(parts) < 2:
+            return {"message": "Использование: warp [star/object_name]"}
 
-        target_star = parts[1].lower()
+        target_name = parts[1].lower()
         current_sys = state["coordinates"]["system"]
         current_star = state["coordinates"]["star"]
+        player_coords = (state["coordinates"]["x"], state["coordinates"]["y"], state["coordinates"]["z"])
 
         if self.enemy_logic.is_in_combat(player_name):
             return {"message": "Нельзя варпать во время боя! Используйте 'flee' для побега."}
-
-        if target_star == current_star:
-            return {"message": "Вы уже у этой звезды!"}
 
         sys_data = self.data.get_system(current_sys)
         if not sys_data:
             return {"message": "Система не найдена!"}
 
         stars = sys_data.get("stars", {})
-        if target_star not in stars:
-            return {"message": f"Звезда {target_star} не найдена в системе!"}
+        target_coords = None
+        target_display_name = None
 
-        star_data = stars[target_star]
+        # Ищем среди звёзд
+        for star_id, star_data in stars.items():
+            if star_data["name"].lower() == target_name or star_id.lower() == target_name:
+                target_coords = star_data["coordinates"]
+                target_display_name = star_data["name"]
+                break
 
-        new_state = state.copy()
-        new_state["coordinates"] = {
-            "system": current_sys,
-            "star": target_star,
-            "x": star_data["coordinates"]["x"],
-            "y": star_data["coordinates"]["y"],
-            "z": star_data["coordinates"]["z"]
+        # Если не звезда, ищем среди объектов
+        if not target_coords:
+            star_data = stars.get(current_star, {})
+            objects = star_data.get("objects", [])
+            for obj in objects:
+                if obj["name"].lower() == target_name:
+                    target_coords = obj["coordinates"]
+                    target_display_name = obj["name"]
+                    break
+
+        if not target_coords:
+            return {"message": f"Цель '{target_name}' не найдена!"}
+
+        # Рассчитываем дистанцию в АЕ
+        distance = self._calculate_distance(
+            player_coords[0], player_coords[1], player_coords[2],
+            target_coords["x"], target_coords["y"], target_coords["z"]
+        )
+
+        # Проверяем, нужно ли варпать
+        if distance < WARP_MIN_DISTANCE:
+            return {"message": f"Слишком близко! Дистанция {distance:.4f}АЕ < {WARP_MIN_DISTANCE}АЕ. Используйте move."}
+
+        travel_time = self._calculate_travel_time(distance, WARP_SPEED)
+
+        # Запускаем таймер варпа
+        self.move_timers[player_name] = {
+            "end_time": time.time() + travel_time,
+            "target_coords": {
+                "system": current_sys,
+                "star": current_star,
+                "x": target_coords["x"],
+                "y": target_coords["y"],
+                "z": target_coords["z"]
+            },
+            "type": "warp",
+            "start_state": state.copy(),
+            "target_name": target_display_name
         }
 
-        # Очищаем цель при варпе
-        if player_name in self.player_targets:
-            del self.player_targets[player_name]
+        # Форматируем дистанцию для красивого вывода
+        if distance < 0.01:
+            dist_str = f"{distance * 149597.87:.0f}тыс.км"
+        elif distance < 1:
+            dist_str = f"{distance * 1000:.0f}мАЕ"
+        else:
+            dist_str = f"{distance:.2f}АЕ"
 
         return {
-            "message": f"🚀 Варп-прыжок к звезде {star_data['name']}!",
-            "state": new_state,
-            "target_cleared": True
+            "travel": True,
+            "travel_time": travel_time,
+            "travel_type": "warp",
+            "message": f"🚀 Варп к {target_display_name}! Дистанция: {dist_str}, время: {travel_time:.1f}с"
         }
 
-    def _handle_move(self, command, state):
-        """Перемещение"""
+    def _handle_move(self, command, state, player_name):
+        """Обычное перемещение с таймером"""
         parts = command.split()
-        new_state = state.copy()
-        new_state['coordinates'] = state['coordinates'].copy()
 
+        # Парсим дельты
+        dx, dy, dz = 0, 0, 0
         i = 1
         while i < len(parts):
             if parts[i] == 'x' and i + 1 < len(parts):
-                new_state['coordinates']['x'] += float(parts[i + 1])
+                dx += float(parts[i + 1])
                 i += 2
             elif parts[i] == 'y' and i + 1 < len(parts):
-                new_state['coordinates']['y'] += float(parts[i + 1])
+                dy += float(parts[i + 1])
                 i += 2
             elif parts[i] == 'z' and i + 1 < len(parts):
-                new_state['coordinates']['z'] += float(parts[i + 1])
+                dz += float(parts[i + 1])
                 i += 2
             else:
                 i += 1
 
-        coords = new_state['coordinates']
+        if dx == 0 and dy == 0 and dz == 0:
+            return {"message": "Использование: move x 10 y 5 z -3"}
+
+        # Рассчитываем дистанцию и время
+        distance = math.sqrt(dx**2 + dy**2 + dz**2)
+        travel_time = self._calculate_travel_time(distance, MOVE_SPEED)
+
+        current_coords = state["coordinates"]
+        target_coords = {
+            "system": current_coords["system"],
+            "star": current_coords["star"],
+            "x": current_coords["x"] + dx,
+            "y": current_coords["y"] + dy,
+            "z": current_coords["z"] + dz
+        }
+
+        # Запускаем таймер перемещения
+        self.move_timers[player_name] = {
+            "end_time": time.time() + travel_time,
+            "target_coords": target_coords,
+            "type": "move",
+            "start_state": state.copy(),
+            "dx": dx, "dy": dy, "dz": dz,
+            "distance": distance
+        }
+
         return {
-            "message": f"Перемещение: X:{coords['x']:.1f} Y:{coords['y']:.1f} Z:{coords['z']:.1f}",
-            "state": new_state
+            "travel": True,
+            "travel_time": travel_time,
+            "travel_type": "move",
+            "message": f"🛸 Перемещение на {distance:.1f}км, время: {travel_time:.1f}с"
+        }
+
+    def check_travel_completion(self, player_name, current_state):
+        """Проверить, завершилось ли перемещение"""
+        if player_name not in self.move_timers:
+            return None
+
+        timer = self.move_timers[player_name]
+        now = time.time()
+
+        if now >= timer["end_time"]:
+            # Перемещение завершено
+            target = timer["target_coords"]
+            travel_type = timer["type"]
+
+            # Очищаем таймер
+            del self.move_timers[player_name]
+
+            # Обновляем состояние
+            new_state = current_state.copy()
+            new_state["coordinates"] = target
+
+            # Очищаем цель при перемещении
+            if player_name in self.player_targets:
+                del self.player_targets[player_name]
+
+            return {
+                "state": new_state,
+                "target_cleared": True,
+                "message": f"✅ {'Варп' if travel_type == 'warp' else 'Прыжок' if travel_type == 'jump' else 'Перемещение'} завершён!"
+            }
+
+        # Ещё в пути
+        remaining = timer["end_time"] - now
+        return {
+            "travel_in_progress": True,
+            "remaining": remaining,
+            "travel_type": timer["type"],
+            "message": f"⏳ В пути... осталось {remaining:.1f}с"
         }
 
     def _handle_repair(self, command, state):
@@ -508,6 +642,19 @@ class GameLogic:
         return {"message": "Недостаточно ремкомплектов или неверная команда! Используйте: repair [нос/лев/прав/корм] [количество]"}
 
     def _execute_command(self, command, state, player_name):
+        # Сначала проверяем, не в пути ли игрок
+        if player_name in self.move_timers:
+            travel_check = self.check_travel_completion(player_name, state)
+            if travel_check and travel_check.get("travel_in_progress"):
+                return {
+                    "cooldown": True,
+                    "remaining": travel_check["remaining"],
+                    "message": travel_check["message"]
+                }
+            elif travel_check and "state" in travel_check:
+                # Перемещение завершено, возвращаем новое состояние
+                return travel_check
+
         # HELP
         if command == CMD_HELP:
             return {"message": """Доступные команды:
@@ -516,8 +663,8 @@ class GameLogic:
 - stars - список звёзд в текущей системе
 - scan - что вокруг (объекты в секторе)
 - jump [system] - прыжок в другую систему
-- warp [star] - варп к другой звезде
-- move x 10 y 5 z -5 - перемещение
+- warp [star/object] - варп к звезде или объекту (>1000км)
+- move x 10 y 5 z -3 - перемещение
 - target [имя/номер] - захватить цель
 - fire [weapon] - выстрелить по цели
 - auto [weapon] - авто-атака
@@ -550,7 +697,7 @@ class GameLogic:
 
         # ПЕРЕМЕЩЕНИЕ
         elif command.startswith(CMD_MOVE):
-            return self._handle_move(command, state)
+            return self._handle_move(command, state, player_name)
 
         # ЦЕЛЬ
         elif command.startswith("target "):
@@ -632,7 +779,7 @@ class GameLogic:
             else:
                 self.last_action_time[player_name] = now
                 result = self._execute_command(command, state, player_name)
-                if result and not result.get("weapon_cooldown") and not result.get("cooldown"):
+                if result and not result.get("weapon_cooldown") and not result.get("cooldown") and not result.get("travel"):
                     if not result.get("no_cooldown"):
                         result["cooldown_after"] = {
                             "remaining": self.cooldown_seconds,

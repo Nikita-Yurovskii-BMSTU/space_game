@@ -152,6 +152,49 @@ class GameServer:
 
         while self.running:
             try:
+                # === ПРОВЕРКА ЗАВЕРШЕНИЯ ПУТЕШЕСТВИЯ ===
+                travel_result = self.logic.check_travel_completion(player_name, state)
+                if travel_result and "state" in travel_result:
+                    new_state = travel_result["state"]
+                    self.db.save_state(new_state)
+                    self.player_states[player_name] = new_state
+
+                    changes = self.logic.get_changes(last_state, new_state)
+                    if changes:
+                        client.send((json.dumps({
+                            "type": MSG_UPDATE,
+                            "data": changes
+                        }) + "\n").encode())
+
+                    last_state = new_state.copy()
+                    state = new_state
+
+                    client.send((json.dumps({
+                        "type": MSG_MESSAGE,
+                        "data": travel_result["message"]
+                    }) + "\n").encode())
+
+                    if travel_result.get("target_cleared"):
+                        client.send((json.dumps({
+                            "type": "target",
+                            "target": None
+                        }) + "\n").encode())
+
+                    # Обновляем интерфейс после перемещения
+                    client.send((json.dumps({
+                        "type": MSG_UPDATE,
+                        "data": {"coordinates": state["coordinates"]}
+                    }) + "\n").encode())
+
+                    continue  # Пропускаем обработку команды в этом цикле
+
+                # === ПРОВЕРКА НА НАЛИЧИЕ КОМАНДЫ ===
+                # Используем select для неблокирующего чтения
+                import select
+                ready, _, _ = select.select([client], [], [], 0.1)
+                if not ready:
+                    continue
+
                 data = client.recv(4096).decode().strip()
                 if not data:
                     break
@@ -167,9 +210,11 @@ class GameServer:
                     }) + "\n").encode())
                     break
 
+                # === ОБРАБОТКА КОМАНДЫ ===
                 response = self.logic.process_command(cmd, state, player_name)
 
                 if response and isinstance(response, dict):
+                    # Обработка кулдауна
                     if response.get("cooldown"):
                         client.send((json.dumps({
                             "type": MSG_COOLDOWN,
@@ -178,6 +223,7 @@ class GameServer:
                         }) + "\n").encode())
                         continue
 
+                    # Обработка кулдауна оружия
                     if response.get("weapon_cooldown"):
                         client.send((json.dumps({
                             "type": MSG_WEAPON_COOLDOWN,
@@ -187,6 +233,16 @@ class GameServer:
                         }) + "\n").encode())
                         continue
 
+                    # Обработка путешествия (не блокируем, просто отправляем сообщение)
+                    if response.get("travel"):
+                        client.send((json.dumps({
+                            "type": MSG_MESSAGE,
+                            "data": response["message"]
+                        }) + "\n").encode())
+                        # Не обновляем состояние сразу, оно обновится по таймеру
+                        continue
+
+                    # Обновление состояния
                     if 'state' in response:
                         new_state = response['state']
                         if new_state != last_state:
@@ -201,30 +257,35 @@ class GameServer:
                             last_state = new_state.copy()
                             state = new_state
 
+                    # Отправка сообщения
                     if 'message' in response:
                         client.send((json.dumps({
                             "type": MSG_MESSAGE,
                             "data": response['message']
                         }) + "\n").encode())
 
+                    # Отправка обзора
                     if 'overview' in response:
                         client.send((json.dumps({
                             "type": "overview",
                             "data": response['overview']
                         }) + "\n").encode())
 
+                    # Отправка цели
                     if 'target' in response:
                         client.send((json.dumps({
                             "type": "target",
                             "target": response['target']
                         }) + "\n").encode())
 
+                    # Сброс цели
                     if response.get("target_cleared"):
                         client.send((json.dumps({
                             "type": "target",
                             "target": None
                         }) + "\n").encode())
 
+                    # Кулдаун после команды
                     if response.get("cooldown_after"):
                         cd = response["cooldown_after"]
                         client.send((json.dumps({
@@ -233,6 +294,7 @@ class GameServer:
                             "message": cd["message"]
                         }) + "\n").encode())
 
+                    # Кулдаун оружия после выстрела
                     if response.get("weapon_cooldown_after"):
                         wc = response["weapon_cooldown_after"]
                         client.send((json.dumps({
@@ -246,6 +308,7 @@ class GameServer:
                 print(f"Ошибка в игровом цикле {player_name}: {e}")
                 break
 
+        # Очистка при отключении
         self.auth.remove_session(token)
         if player_name in self.player_states:
             del self.player_states[player_name]
@@ -253,6 +316,8 @@ class GameServer:
             del self.player_clients[player_name]
         if player_name in self.logic.player_targets:
             del self.logic.player_targets[player_name]
+        if player_name in self.logic.move_timers:
+            del self.logic.move_timers[player_name]
         self.logic.enemy_logic.end_combat(player_name)
         client.close()
         print(f"Игрок {player_name} отключился")
