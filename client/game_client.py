@@ -34,7 +34,6 @@ class GameClient:
         """Обработка входящих сообщений"""
         msg_type = msg.get('type', '')
         print(f"[DEBUG] Клиент получил: {msg_type}")
-        print(f"[DEBUG] Содержимое: {msg}")
 
         if msg_type == MSG_AUTH:
             self.state.add_log(f"[yellow]{msg.get('message', '')}[/yellow]")
@@ -60,8 +59,7 @@ class GameClient:
                 msg.get('message', '')
             )
 
-        elif msg_type == MSG_WEAPON_COOLDOWN:  # ← ВОТ ЭТО ДОБАВЬ
-            print(f"[DEBUG] Клиент получил WEAPON_COOLDOWN: {msg}")
+        elif msg_type == MSG_WEAPON_COOLDOWN:
             self.ui.set_weapon_cooldown(
                 msg.get('weapon', ''),
                 msg.get('remaining', 0),
@@ -70,10 +68,14 @@ class GameClient:
 
         elif msg_type == "overview":
             self.state.overview = msg.get('data', [])
+            self.state.add_log(f"[green]✓ Обзор обновлён: {len(self.state.overview)} объектов[/green]")
 
         elif msg_type == "target":
             self.state.target = msg.get('target')
-            self.state.add_log(f"[cyan]🎯 Цель захвачена: {msg.get('target')}[/cyan]")
+            if msg.get('target'):
+                self.state.add_log(f"[cyan]🎯 Цель: {msg.get('target')}[/cyan]")
+            else:
+                self.state.add_log(f"[yellow]🎯 Цель сброшена[/yellow]")
 
         elif msg_type == MSG_ERROR:
             self.state.add_log(f"[red]Ошибка: {msg.get('data', '')}[/red]")

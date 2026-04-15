@@ -21,28 +21,34 @@ class GameServer:
         self.data = DataLoader()
         self.logic = GameLogic(self.db, self.data)
 
-        # Для EnemyLogic
         self.player_states = {}
         self.player_clients = {}
+        self.logic.server = self
         self.logic.enemy_logic.set_server(self)
 
     def get_player_state(self, player_name):
-        """Получить состояние игрока"""
         return self.player_states.get(player_name)
 
     def save_player_state(self, player_name, state):
-        """Сохранить состояние игрока"""
         self.player_states[player_name] = state
         self.db.save_state(state)
 
     def send_to_player(self, player_name, message):
-        """Отправить сообщение игроку"""
         client = self.player_clients.get(player_name)
         if client:
             try:
                 client.send((json.dumps(message) + "\n").encode())
             except Exception as e:
                 print(f"Ошибка отправки игроку {player_name}: {e}")
+
+    def get_players_in_sector(self, system, star):
+        """Получить всех игроков в данном секторе"""
+        players = {}
+        for name, state in self.player_states.items():
+            if (state["coordinates"]["system"] == system and
+                state["coordinates"]["star"] == star):
+                players[name] = state["coordinates"]
+        return players
 
     def start(self):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -86,15 +92,10 @@ class GameServer:
                             "type": MSG_AUTH,
                             "message": message
                         }) + "\n").encode())
-                        if success:
-                            client.send((json.dumps({
-                                "type": MSG_AUTH,
-                                "message": "Теперь войдите: login имя_пользователя пароль"
-                            }) + "\n").encode())
                     else:
                         client.send((json.dumps({
                             "type": MSG_AUTH,
-                            "message": "Использование: register имя_пользователя пароль"
+                            "message": "Использование: register имя пароль"
                         }) + "\n").encode())
 
                 elif cmd.startswith(CMD_LOGIN):
@@ -124,14 +125,13 @@ class GameServer:
                         else:
                             client.send((json.dumps({
                                 "type": MSG_AUTH,
-                                "message": "Неверное имя пользователя или пароль!"
+                                "message": "Неверное имя или пароль!"
                             }) + "\n").encode())
                     else:
                         client.send((json.dumps({
                             "type": MSG_AUTH,
-                            "message": "Использование: login имя_пользователя пароль"
+                            "message": "Использование: login имя пароль"
                         }) + "\n").encode())
-
                 else:
                     client.send((json.dumps({
                         "type": MSG_AUTH,
@@ -207,6 +207,24 @@ class GameServer:
                             "data": response['message']
                         }) + "\n").encode())
 
+                    if 'overview' in response:
+                        client.send((json.dumps({
+                            "type": "overview",
+                            "data": response['overview']
+                        }) + "\n").encode())
+
+                    if 'target' in response:
+                        client.send((json.dumps({
+                            "type": "target",
+                            "target": response['target']
+                        }) + "\n").encode())
+
+                    if response.get("target_cleared"):
+                        client.send((json.dumps({
+                            "type": "target",
+                            "target": None
+                        }) + "\n").encode())
+
                     if response.get("cooldown_after"):
                         cd = response["cooldown_after"]
                         client.send((json.dumps({
@@ -233,6 +251,8 @@ class GameServer:
             del self.player_states[player_name]
         if player_name in self.player_clients:
             del self.player_clients[player_name]
+        if player_name in self.logic.player_targets:
+            del self.logic.player_targets[player_name]
         self.logic.enemy_logic.end_combat(player_name)
         client.close()
         print(f"Игрок {player_name} отключился")
