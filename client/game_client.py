@@ -68,6 +68,13 @@ class GameClient:
                 msg.get('message', '')
             )
 
+        elif msg_type == "overview":
+            self.state.overview = msg.get('data', [])
+
+        elif msg_type == "target":
+            self.state.target = msg.get('target')
+            self.state.add_log(f"[cyan]🎯 Цель захвачена: {msg.get('target')}[/cyan]")
+
         elif msg_type == MSG_ERROR:
             self.state.add_log(f"[red]Ошибка: {msg.get('data', '')}[/red]")
 

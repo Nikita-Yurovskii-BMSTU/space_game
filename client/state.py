@@ -15,6 +15,8 @@ class ClientState:
         self.logs = deque(maxlen=100)  # храним больше строк
         self.log_scroll_offset = 0  # 0 = показываем последние строки
         self.ship = {"ship_id": "fighter", "hull": {}, "installed_weapons": []}
+        self.overview = []  # список объектов вокруг
+        self.target = None  # текущая цель
 
 
     def update_full(self, data):

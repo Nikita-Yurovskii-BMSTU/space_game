@@ -97,8 +97,8 @@ class GameUI:
         layout = Layout()
         layout.split_column(
             Layout(name="top", size=5),
-            Layout(name="middle", size=20),
-            Layout(name="bottom", size=9),
+            Layout(name="middle", size=16),
+            Layout(name="bottom", size=10),
             Layout(name="input", size=3)
         )
 
@@ -106,40 +106,36 @@ class GameUI:
         top_lines = [
             f"[bold cyan]Пилот:[/bold cyan] {self.state.player} | Система: {self.state.coordinates.get('system', 'nexus')} | Звезда: {self.state.coordinates.get('star', 'nexus_alpha')}",
             f"[bold cyan]Координаты:[/bold cyan] X:{self.state.coordinates.get('x', 0):.1f} Y:{self.state.coordinates.get('y', 0):.1f} Z:{self.state.coordinates.get('z', 0):.1f}",
+            f"[bold cyan]Цель:[/bold cyan] {self.state.target or 'нет'}",
             "",
-            "[bold cyan]Команды:[/bold cyan] systems, stars, scan, jump, warp, move, fire, status",
-            ""
+            "[bold cyan]Команды:[/bold cyan] scan, target, fire, move, warp, jump, auto"
         ][:5]
         layout["top"].update(Panel("\n".join(top_lines), title="СТАТУС КОРАБЛЯ", height=5))
 
         # Средняя панель (логи)
         all_logs = list(self.state.logs)
-        visible_lines = 18
+        visible_lines = 14
 
-        # Берём ПЕРВЫЕ строки (новые сверху)
         if len(all_logs) > visible_lines:
-            log_lines = all_logs[:visible_lines]  # первые 18
+            log_lines = all_logs[:visible_lines]
         else:
             log_lines = all_logs[:]
-            # Дополняем пустыми строками СНИЗУ
             while len(log_lines) < visible_lines:
                 log_lines.append("")
 
-        # Кулдаун в первую строку (сверху)
         cooldown_anim = self.get_cooldown_animation()
         if cooldown_anim:
             if log_lines:
                 log_lines[0] = cooldown_anim
-            else:
-                log_lines = [cooldown_anim] + [""] * (visible_lines - 1)
 
         layout["middle"].update(Panel("\n".join(log_lines), title="ЛОГИ СОБЫТИЙ", height=visible_lines))
 
-        # Нижняя панель
+        # Нижняя панель — 3 колонки
         from rich.layout import Layout as RowLayout
         bottom_row = RowLayout()
         bottom_row.split_row(
             self._create_hull_panel(),
+            self._create_overview_panel(),
             self._create_weapons_panel()
         )
         layout["bottom"].update(bottom_row)
@@ -147,19 +143,66 @@ class GameUI:
         # Панель ввода
         prompt = "> " if self.authenticated else "🔐 "
         display = prompt + self.current_input
-        layout["input"].update(Panel(display, title="ВВОД КОМАНДЫ (Enter для отправки)", style="bright_blue", height=3))
-
-        if self.shake_frames > 0:
-            import random
-            offset_x = random.randint(-self.shake_intensity, self.shake_intensity)
-            offset_y = random.randint(-self.shake_intensity, self.shake_intensity)
-            self.shake_frames -= 1
-
-            # Добавляем отступы для эффекта тряски
-            shake_padding = " " * abs(offset_x) if offset_x > 0 else ""
-            # Но это не сработает с Layout, поэтому просто добавим в логи
+        layout["input"].update(Panel(display, title="ВВОД КОМАНДЫ", style="bright_blue", height=3))
 
         return layout
+
+    def _create_overview_panel(self):
+        """Создание панели обзора"""
+        lines = self._draw_overview().split('\n')
+        if len(lines) > 8:
+            lines = lines[:8]
+        while len(lines) < 8:
+            lines.append("")
+        return Panel("\n".join(lines), title="ОБЗОР")
+
+    def _draw_overview(self):
+        """Отрисовка обзора"""
+        if not hasattr(self.state, 'overview') or not self.state.overview:
+            return "[dim]Нет данных. Используйте scan[/dim]"
+
+        lines = []
+        for i, obj in enumerate(self.state.overview[:8]):
+            # Определяем иконку
+            icon = self._get_object_icon(obj)
+
+            # Формируем строку
+            if obj['type'] == 'enemy':
+                hp_percent = (obj.get('hp', 0) / obj.get('max_hp', 1)) * 100
+                hp_color = "green" if hp_percent > 70 else "yellow" if hp_percent > 30 else "red"
+                line = f"{i + 1}. {icon} {obj['name']} [{hp_color}]{hp_percent:.0f}%[/] ({obj['distance']:.0f}m)"
+            elif obj['type'] == 'player':
+                line = f"{i + 1}. {icon} {obj['name']} ({obj['distance']:.0f}m)"
+            else:
+                line = f"{i + 1}. {icon} {obj['name']} ({obj['distance']:.0f}m)"
+
+            # Подсветка цели
+            if self.state.target and obj['name'] == self.state.target:
+                line = f"[bold yellow]> {line}[/bold yellow]"
+            else:
+                line = f"  {line}"
+
+            lines.append(line)
+
+        return "\n".join(lines)
+
+    def _get_object_icon(self, obj):
+        """Получить иконку для объекта"""
+        icons = {
+            'station': '🛸',
+            'planet': '🪐',
+            'belt': '☄️',
+            'debris_field': '💀',
+            'ice_field': '❄️',
+            'enemy': {'safe': '🟢', 'moderate': '🟡', 'dangerous': '🟠', 'deadly': '🔴'}.get(obj.get('danger', 'moderate'),
+                                                                                         '👾'),
+            'player': '👤',
+            'npc': '🤖'
+        }
+
+        if obj['type'] == 'enemy':
+            return icons['enemy']
+        return icons.get(obj['type'], '•')
 
     def _create_hull_panel(self):
         """Создание панели состояния корпуса"""

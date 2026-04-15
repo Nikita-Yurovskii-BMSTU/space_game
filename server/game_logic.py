@@ -41,6 +41,10 @@ class GameLogic:
         elif command.startswith("auto "):
             return self._handle_auto(command, state, player_name)
 
+        elif command.startswith("target "):
+            target_name = command[7:].strip()
+            return self._handle_target(target_name, state, player_name)
+
         elif command == "auto off":
             return self._handle_auto_off(player_name)
 
@@ -77,44 +81,9 @@ class GameLogic:
                     message += f"- {star_data['name']}\n"
             return {"message": message}
 
+
         elif command == "scan":
-            current_sys = state["coordinates"]["system"]
-            current_star = state["coordinates"]["star"]
-            sys_data = self.data.get_system(current_sys)
-            if not sys_data:
-                return {"message": "Система не найдена!"}
-
-            star_data = sys_data["stars"].get(current_star, {})
-            objects = star_data.get("objects", [])
-
-            if not objects:
-                return {"message": "Пустой сектор."}
-
-            message = f"Объекты в {star_data['name']}:\n"
-            for obj in objects:
-                obj_coords = obj["coordinates"]
-                dist = self._calculate_distance(
-                    state["coordinates"]["x"], state["coordinates"]["y"], state["coordinates"]["z"],
-                    obj_coords["x"], obj_coords["y"], obj_coords["z"]
-                )
-                danger = obj.get("danger", "safe")
-                danger_icon = {"safe": "🟢", "moderate": "🟡", "dangerous": "🟠", "deadly": "🔴"}.get(danger, "")
-
-                if obj["type"] == "station":
-                    message += f"- 🛸 {obj['name']} (станция) на дистанции {dist:.1f}\n"
-                elif obj["type"] == "planet":
-                    message += f"- 🪐 {obj['name']} (планета) на дистанции {dist:.1f}\n"
-                elif obj["type"] in ["belt", "debris_field", "ice_field"]:
-                    message += f"- ☄️ {obj['name']} (пояс) на дистанции {dist:.1f} {danger_icon}\n"
-                    if "enemies" in obj:
-                        message += f"  Враги: {', '.join(obj['enemies'])}\n"
-
-            combat_info = self.enemy_logic.get_combat_info(player_name)
-            if combat_info:
-                hull_percent = (combat_info["total_hull"] / combat_info["max_hull"]) * 100 if combat_info["max_hull"] > 0 else 0
-                message += f"\n⚔️ В БОЮ: {combat_info['enemy_name']} ({hull_percent:.0f}% HP) на дистанции {combat_info['distance']:.1f}"
-
-            return {"message": message}
+            return self._handle_scan(state, player_name)
 
         elif command.startswith("jump "):
             target_sys = command[5:].strip().lower()
@@ -619,3 +588,109 @@ class GameLogic:
                             "type": "message",
                             "data": "[yellow]🔴 Авто-атака остановлена (враг уничтожен)[/yellow]"
                         })
+
+    def _handle_scan(self, state, player_name):
+        """Сканирование сектора — возвращает overview"""
+        current_sys = state["coordinates"]["system"]
+        current_star = state["coordinates"]["star"]
+
+        # Получаем всех игроков в этом секторе
+        players_here = []
+        if hasattr(self, 'server'):
+            sector_players = self.server.get_players_in_sector(current_sys, current_star)
+            for p_name, p_coords in sector_players.items():
+                if p_name != player_name:
+                    dist = self._calculate_distance(
+                        state["coordinates"]["x"], state["coordinates"]["y"], state["coordinates"]["z"],
+                        p_coords["x"], p_coords["y"], p_coords["z"]
+                    )
+                    players_here.append({
+                        "type": "player",
+                        "name": p_name,
+                        "distance": dist,
+                        "danger": "safe"
+                    })
+
+        # Получаем врагов и объекты из системы
+        sys_data = self.data.get_system(current_sys)
+        if not sys_data:
+            return {"message": "Система не найдена!"}
+
+        star_data = sys_data["stars"].get(current_star, {})
+        objects = star_data.get("objects", [])
+
+        overview = []
+
+        # Добавляем объекты (станции, планеты, пояса)
+        for obj in objects:
+            obj_coords = obj["coordinates"]
+            dist = self._calculate_distance(
+                state["coordinates"]["x"], state["coordinates"]["y"], state["coordinates"]["z"],
+                obj_coords["x"], obj_coords["y"], obj_coords["z"]
+            )
+
+            item = {
+                "type": obj["type"],
+                "name": obj["name"],
+                "distance": dist,
+                "danger": obj.get("danger", "safe")
+            }
+
+            # Если есть враги — добавляем их отдельно
+            if "enemies" in obj:
+                for enemy_id in obj["enemies"]:
+                    enemy_data = self.data.get_enemy(enemy_id)
+                    if enemy_data:
+                        # Проверяем, жив ли враг (можно хранить состояние в enemy_logic)
+                        enemy_hp = self._get_enemy_hp(current_sys, current_star, obj["name"], enemy_id)
+                        if enemy_hp > 0:
+                            overview.append({
+                                "type": "enemy",
+                                "name": enemy_data["name"],
+                                "distance": dist,
+                                "danger": obj.get("danger", "moderate"),
+                                "hp": enemy_hp,
+                                "max_hp": sum(enemy_data["hull"].values())
+                            })
+            else:
+                overview.append(item)
+
+        # Добавляем игроков
+        overview.extend(players_here)
+
+        # Сортируем по дистанции
+        overview.sort(key=lambda x: x["distance"])
+
+        # Отправляем overview клиенту
+        return {
+            "overview": overview,
+            "message": f"Сканирование завершено. Обнаружено объектов: {len(overview)}"
+        }
+
+    def _handle_target(self, target_name, state, player_name):
+        """Захват цели"""
+        # Ищем цель в overview
+        overview = self._get_overview(state, player_name)
+
+        target = None
+        for obj in overview:
+            if obj["name"].lower() == target_name.lower():
+                target = obj
+                break
+            # По номеру
+            if target_name.isdigit() and int(target_name) <= len(overview):
+                target = overview[int(target_name) - 1]
+                break
+
+        if not target:
+            return {"message": f"Цель '{target_name}' не найдена!"}
+
+        # Сохраняем цель
+        if not hasattr(self, 'player_targets'):
+            self.player_targets = {}
+        self.player_targets[player_name] = target
+
+        return {
+            "target": target["name"],
+            "message": f"🎯 Цель захвачена: {target['name']} (дистанция: {target['distance']:.0f})"
+        }
